@@ -1,6 +1,11 @@
+//! Lexer code to transform raw source code strings into tokens.
+//!
+//! The main function to use in this module is `lex`, which transforms
+//! a raw source code string into `Token`s (or a `LexError`).
+
 use std::{iter::FromIterator, num::ParseFloatError};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Token {
     LeftBrace,
     RightBrace,
@@ -51,20 +56,12 @@ pub enum Token {
     While,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum LexError {
     UnknownChar(char),
     ParseFloatError(String, ParseFloatError),
     UnterminatedString,
 }
-
-// /// TokenContext holds a token and contextual information like its
-// /// position in the source file.
-// struct TokenContext {
-//     token: Token,
-//     line: u8,
-//     column: u8,
-// }
 
 /// LexPosition holds the current position for our lexer.
 struct LexPosition {
@@ -88,10 +85,6 @@ impl LexPosition {
     fn advance(&mut self) {
         self.position += 1;
     }
-
-    // fn done(self) -> bool {
-    //     self.peek().is_none()
-    // }
 }
 
 pub fn lex<S: Into<String>>(source: S) -> Result<Vec<Token>, LexError> {
@@ -200,6 +193,46 @@ pub fn lex<S: Into<String>>(source: S) -> Result<Vec<Token>, LexError> {
     Ok(tokens)
 }
 
+#[test]
+fn test_lex() {
+    // Token salad
+    assert_eq!(
+        lex("{} hello () .-+; !!=! <><=>=>"),
+        Ok(vec![
+            Token::LeftBrace,
+            Token::RightBrace,
+            Token::Identifier("hello".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::Dot,
+            Token::Minus,
+            Token::Plus,
+            Token::Semicolon,
+            Token::Bang,
+            Token::BangEqual,
+            Token::Bang,
+            Token::Less,
+            Token::Greater,
+            Token::LessEqual,
+            Token::GreaterEqual,
+            Token::Greater,
+        ])
+    );
+
+    // Comments
+    assert_eq!(
+        lex("/123//Hello\n//Ignore\n456"),
+        Ok(vec![
+            Token::Slash,
+            Token::Number(123.0),
+            Token::Number(456.0),
+        ])
+    );
+
+    // Unterminated string
+    assert_eq!(lex("\"nope"), Err(LexError::UnterminatedString));
+}
+
 fn eat_comment(position: &mut LexPosition) {
     while let Some(&c) = position.peek() {
         if c == '\n' {
@@ -273,6 +306,6 @@ fn identifier_or_reserved(position: &mut LexPosition) -> Token {
         "true" => Token::True,
         "var" => Token::Var,
         "while" => Token::While,
-        s => Token::String(s.to_string()),
+        s => Token::Identifier(s.to_string()),
     }
 }
