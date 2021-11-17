@@ -130,10 +130,7 @@ pub fn lex<S: Into<String>>(source: S) -> Result<Vec<Token>, LexError> {
         Token {
             value,
             start,
-            end: Position {
-                line: start.line,
-                column: start.column + 1,
-            },
+            end: start,
         }
     }
 
@@ -143,7 +140,7 @@ pub fn lex<S: Into<String>>(source: S) -> Result<Vec<Token>, LexError> {
             start,
             end: Position {
                 line: start.line,
-                column: start.column + 2,
+                column: start.column + 1,
             },
         }
     }
@@ -255,36 +252,199 @@ pub fn lex<S: Into<String>>(source: S) -> Result<Vec<Token>, LexError> {
 fn test_lex() {
     // Token salad
     assert_eq!(
-        lex("{} hello () .-+; !!=! <><=>=>")
-            .map(|ts| ts.into_iter().map(move |t| t.value).collect()),
+        lex("{} hello () .-+; !!=! <><=>=>"),
         Ok(vec![
-            TokenValue::LeftBrace,
-            TokenValue::RightBrace,
-            TokenValue::Identifier("hello".to_string()),
-            TokenValue::LeftParen,
-            TokenValue::RightParen,
-            TokenValue::Dot,
-            TokenValue::Minus,
-            TokenValue::Plus,
-            TokenValue::Semicolon,
-            TokenValue::Bang,
-            TokenValue::BangEqual,
-            TokenValue::Bang,
-            TokenValue::Less,
-            TokenValue::Greater,
-            TokenValue::LessEqual,
-            TokenValue::GreaterEqual,
-            TokenValue::Greater,
+            Token {
+                value: TokenValue::LeftBrace,
+                start: Position { line: 1, column: 1 },
+                end: Position { line: 1, column: 1 }
+            },
+            Token {
+                value: TokenValue::RightBrace,
+                start: Position { line: 1, column: 2 },
+                end: Position { line: 1, column: 2 }
+            },
+            Token {
+                value: TokenValue::Identifier("hello".to_string()),
+                start: Position { line: 1, column: 4 },
+                end: Position { line: 1, column: 8 }
+            },
+            Token {
+                value: TokenValue::LeftParen,
+                start: Position {
+                    line: 1,
+                    column: 10
+                },
+                end: Position {
+                    line: 1,
+                    column: 10
+                }
+            },
+            Token {
+                value: TokenValue::RightParen,
+                start: Position {
+                    line: 1,
+                    column: 11
+                },
+                end: Position {
+                    line: 1,
+                    column: 11
+                }
+            },
+            Token {
+                value: TokenValue::Dot,
+                start: Position {
+                    line: 1,
+                    column: 13
+                },
+                end: Position {
+                    line: 1,
+                    column: 13
+                }
+            },
+            Token {
+                value: TokenValue::Minus,
+                start: Position {
+                    line: 1,
+                    column: 14
+                },
+                end: Position {
+                    line: 1,
+                    column: 14
+                }
+            },
+            Token {
+                value: TokenValue::Plus,
+                start: Position {
+                    line: 1,
+                    column: 15
+                },
+                end: Position {
+                    line: 1,
+                    column: 15
+                }
+            },
+            Token {
+                value: TokenValue::Semicolon,
+                start: Position {
+                    line: 1,
+                    column: 16
+                },
+                end: Position {
+                    line: 1,
+                    column: 16
+                }
+            },
+            Token {
+                value: TokenValue::Bang,
+                start: Position {
+                    line: 1,
+                    column: 18
+                },
+                end: Position {
+                    line: 1,
+                    column: 18
+                }
+            },
+            Token {
+                value: TokenValue::BangEqual,
+                start: Position {
+                    line: 1,
+                    column: 19
+                },
+                end: Position {
+                    line: 1,
+                    column: 20
+                }
+            },
+            Token {
+                value: TokenValue::Bang,
+                start: Position {
+                    line: 1,
+                    column: 21
+                },
+                end: Position {
+                    line: 1,
+                    column: 21
+                }
+            },
+            Token {
+                value: TokenValue::Less,
+                start: Position {
+                    line: 1,
+                    column: 23
+                },
+                end: Position {
+                    line: 1,
+                    column: 23
+                }
+            },
+            Token {
+                value: TokenValue::Greater,
+                start: Position {
+                    line: 1,
+                    column: 24
+                },
+                end: Position {
+                    line: 1,
+                    column: 24
+                }
+            },
+            Token {
+                value: TokenValue::LessEqual,
+                start: Position {
+                    line: 1,
+                    column: 25
+                },
+                end: Position {
+                    line: 1,
+                    column: 26
+                }
+            },
+            Token {
+                value: TokenValue::GreaterEqual,
+                start: Position {
+                    line: 1,
+                    column: 27
+                },
+                end: Position {
+                    line: 1,
+                    column: 28
+                }
+            },
+            Token {
+                value: TokenValue::Greater,
+                start: Position {
+                    line: 1,
+                    column: 29
+                },
+                end: Position {
+                    line: 1,
+                    column: 29
+                }
+            },
         ])
     );
 
     // Comments
     assert_eq!(
-        lex("/123//Hello\n//Ignore\n456").map(|ts| ts.into_iter().map(|t| t.value).collect()),
+        lex("/123//Hello\n//Ignore\n456"),
         Ok(vec![
-            TokenValue::Slash,
-            TokenValue::Number(123.0),
-            TokenValue::Number(456.0),
+            Token {
+                value: TokenValue::Slash,
+                start: Position { line: 1, column: 1 },
+                end: Position { line: 1, column: 1 }
+            },
+            Token {
+                value: TokenValue::Number(123.0),
+                start: Position { line: 1, column: 2 },
+                end: Position { line: 1, column: 4 }
+            },
+            Token {
+                value: TokenValue::Number(456.0),
+                start: Position { line: 3, column: 1 },
+                end: Position { line: 3, column: 3 }
+            },
         ])
     );
 
