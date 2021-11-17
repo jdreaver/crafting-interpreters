@@ -83,18 +83,78 @@ pub enum LexErrorValue {
     UnterminatedString,
 }
 
-/// LexPosition holds the current position for our lexer.
-struct LexPosition {
+/// Holds internal state of lexer
+pub struct Lexer {
     source: Vec<(Position, char)>,
     index: usize,
+    pub tokens: Vec<Token>,
 }
 
-impl LexPosition {
-    fn new<S: Into<String>>(source: S) -> Self {
-        LexPosition {
+impl Lexer {
+    pub fn new<S: Into<String>>(source: S) -> Self {
+        Lexer {
             source: position_chars(source),
             index: 0,
+            tokens: Vec::new(),
         }
+    }
+
+    pub fn lex(&mut self) -> Result<(), LexError> {
+        while let Some(&start) = self.peek() {
+            let (start_pos, peeked) = start;
+            match peeked {
+                '{' => self.add_single_char_token(TokenValue::LeftBrace, start_pos),
+                '}' => self.add_single_char_token(TokenValue::RightBrace, start_pos),
+                '(' => self.add_single_char_token(TokenValue::LeftParen, start_pos),
+                ')' => self.add_single_char_token(TokenValue::RightParen, start_pos),
+                ',' => self.add_single_char_token(TokenValue::Comma, start_pos),
+                '.' => self.add_single_char_token(TokenValue::Dot, start_pos),
+                '-' => self.add_single_char_token(TokenValue::Minus, start_pos),
+                '+' => self.add_single_char_token(TokenValue::Plus, start_pos),
+                ';' => self.add_single_char_token(TokenValue::Semicolon, start_pos),
+                '*' => self.add_single_char_token(TokenValue::Star, start_pos),
+                '!' => {
+                    self.add_two_char_token(TokenValue::Bang, '=', TokenValue::BangEqual, start_pos)
+                }
+                '=' => self.add_two_char_token(
+                    TokenValue::Equal,
+                    '=',
+                    TokenValue::EqualEqual,
+                    start_pos,
+                ),
+                '<' => {
+                    self.add_two_char_token(TokenValue::Less, '=', TokenValue::LessEqual, start_pos)
+                }
+                '>' => self.add_two_char_token(
+                    TokenValue::Greater,
+                    '=',
+                    TokenValue::GreaterEqual,
+                    start_pos,
+                ),
+                '/' => {
+                    self.advance();
+                    if self.peek().map(|p| p.1) == Some('/') {
+                        self.eat_comment(&start_pos);
+                    } else {
+                        self.tokens
+                            .push(make_single_tok(TokenValue::Slash, start_pos));
+                    }
+                }
+                '"' => self.string_token(&start)?,
+                c if c.is_whitespace() => self.advance(),
+                c if c.is_numeric() => self.number_token(&start_pos)?,
+                c if c.is_alphabetic() => self.identifier_or_reserved(&start_pos),
+                c => {
+                    return Err(LexError {
+                        error: LexErrorValue::UnknownChar(c),
+                        start: start_pos,
+                        end: start_pos,
+                    })
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// View the next character but don't advance our current position
@@ -104,6 +164,132 @@ impl LexPosition {
 
     fn advance(&mut self) {
         self.index += 1;
+    }
+
+    fn add_single_char_token(&mut self, value: TokenValue, start: Position) {
+        self.tokens.push(make_single_tok(value, start));
+        self.advance();
+    }
+
+    fn add_two_char_token(
+        &mut self,
+        single_val: TokenValue,
+        c: char,
+        double_val: TokenValue,
+        start: Position,
+    ) {
+        self.advance();
+        if self.peek().map(|p| p.1) == Some(c) {
+            self.tokens.push(make_double_tok(double_val, start));
+            self.advance();
+        } else {
+            self.tokens.push(make_single_tok(single_val, start));
+        }
+    }
+
+    fn eat_comment(&mut self, start: &Position) {
+        while let Some(&(pos, _)) = self.peek() {
+            if pos.line != start.line {
+                return;
+            }
+            self.advance();
+        }
+    }
+
+    fn string_token(&mut self, &(start, start_char): &(Position, char)) -> Result<(), LexError> {
+        // Invariant: we should be on the opening quote
+        assert_eq!(start_char, '"');
+        self.advance();
+
+        let mut str_vec = Vec::new();
+        let mut last_pos = start;
+        while let Some(&(pos, c)) = self.peek() {
+            self.advance();
+            if c == '"' {
+                self.tokens.push(Token {
+                    value: TokenValue::String(String::from_iter(str_vec)),
+                    start,
+                    end: pos,
+                });
+                return Ok(());
+            }
+            str_vec.push(c);
+            last_pos = pos;
+        }
+
+        // If we get here, we ran out of input before we saw a closing
+        // quote
+        Err(LexError {
+            error: LexErrorValue::UnterminatedString,
+            start,
+            end: last_pos,
+        })
+    }
+
+    fn number_token(&mut self, &start: &Position) -> Result<(), LexError> {
+        let mut end = start;
+        let mut num_chars = Vec::<char>::new();
+        while let Some(&(pos, c)) = self.peek() {
+            if c.is_numeric() || c == '.' {
+                num_chars.push(c);
+                end = pos;
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        let num_str = String::from_iter(num_chars);
+        match num_str.parse::<f64>() {
+            Ok(f) => {
+                self.tokens.push(Token {
+                    value: TokenValue::Number(f),
+                    start,
+                    end,
+                });
+                Ok(())
+            }
+            Err(err) => Err(LexError {
+                error: LexErrorValue::ParseFloatError(num_str, err),
+                start,
+                end,
+            }),
+        }
+    }
+
+    fn identifier_or_reserved(&mut self, &start: &Position) {
+        let mut end = start;
+        let mut chars = Vec::<char>::new();
+        while let Some(&(pos, c)) = self.peek() {
+            if c.is_alphanumeric() {
+                chars.push(c);
+                end = pos;
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        let value = match String::from_iter(chars).as_str() {
+            "and" => TokenValue::And,
+            "class" => TokenValue::Class,
+            "else" => TokenValue::Else,
+            "false" => TokenValue::False,
+            "for" => TokenValue::For,
+            "fun" => TokenValue::Fun,
+            "if" => TokenValue::If,
+            "nil" => TokenValue::Nil,
+            "or" => TokenValue::Or,
+            "print" => TokenValue::Print,
+            "return" => TokenValue::Return,
+            "super" => TokenValue::Super,
+            "this" => TokenValue::This,
+            "true" => TokenValue::True,
+            "var" => TokenValue::Var,
+            "while" => TokenValue::While,
+            s => TokenValue::Identifier(s.to_string()),
+        };
+        self.tokens.push(Token { value, start, end });
     }
 }
 
@@ -128,145 +314,33 @@ fn position_chars<S: Into<String>>(source: S) -> Vec<(Position, char)> {
         .collect()
 }
 
-pub fn lex<S: Into<String>>(source: S) -> Result<Vec<Token>, LexError> {
-    let mut position = LexPosition::new(source);
-
-    let mut tokens = Vec::<Token>::new();
-
-    fn make_single_tok(value: TokenValue, start: Position) -> Token {
-        Token {
-            value,
-            start,
-            end: start,
-        }
+fn make_single_tok(value: TokenValue, start: Position) -> Token {
+    Token {
+        value,
+        start,
+        end: start,
     }
+}
 
-    fn make_double_tok(value: TokenValue, start: Position) -> Token {
-        Token {
-            value,
-            start,
-            end: Position {
-                line: start.line,
-                column: start.column + 1,
-            },
-        }
+fn make_double_tok(value: TokenValue, start: Position) -> Token {
+    Token {
+        value,
+        start,
+        end: Position {
+            line: start.line,
+            column: start.column + 1,
+        },
     }
-
-    fn single_tok(
-        position: &mut LexPosition,
-        tokens: &mut Vec<Token>,
-        value: TokenValue,
-        start: Position,
-    ) {
-        tokens.push(make_single_tok(value, start));
-        position.advance();
-    }
-
-    fn two_char_tok(
-        position: &mut LexPosition,
-        tokens: &mut Vec<Token>,
-        single_val: TokenValue,
-        c: char,
-        double_val: TokenValue,
-        start: Position,
-    ) {
-        position.advance();
-        if position.peek().map(|p| p.1) == Some(c) {
-            tokens.push(make_double_tok(double_val, start));
-            position.advance();
-        } else {
-            tokens.push(make_single_tok(single_val, start));
-        }
-    }
-
-    while let Some(&start) = position.peek() {
-        let (start_pos, peeked) = start;
-        match peeked {
-            '{' => single_tok(&mut position, &mut tokens, TokenValue::LeftBrace, start_pos),
-            '}' => single_tok(
-                &mut position,
-                &mut tokens,
-                TokenValue::RightBrace,
-                start_pos,
-            ),
-            '(' => single_tok(&mut position, &mut tokens, TokenValue::LeftParen, start_pos),
-            ')' => single_tok(
-                &mut position,
-                &mut tokens,
-                TokenValue::RightParen,
-                start_pos,
-            ),
-            ',' => single_tok(&mut position, &mut tokens, TokenValue::Comma, start_pos),
-            '.' => single_tok(&mut position, &mut tokens, TokenValue::Dot, start_pos),
-            '-' => single_tok(&mut position, &mut tokens, TokenValue::Minus, start_pos),
-            '+' => single_tok(&mut position, &mut tokens, TokenValue::Plus, start_pos),
-            ';' => single_tok(&mut position, &mut tokens, TokenValue::Semicolon, start_pos),
-            '*' => single_tok(&mut position, &mut tokens, TokenValue::Star, start_pos),
-            '!' => two_char_tok(
-                &mut position,
-                &mut tokens,
-                TokenValue::Bang,
-                '=',
-                TokenValue::BangEqual,
-                start_pos,
-            ),
-            '=' => two_char_tok(
-                &mut position,
-                &mut tokens,
-                TokenValue::Equal,
-                '=',
-                TokenValue::EqualEqual,
-                start_pos,
-            ),
-            '<' => two_char_tok(
-                &mut position,
-                &mut tokens,
-                TokenValue::Less,
-                '=',
-                TokenValue::LessEqual,
-                start_pos,
-            ),
-            '>' => two_char_tok(
-                &mut position,
-                &mut tokens,
-                TokenValue::Greater,
-                '=',
-                TokenValue::GreaterEqual,
-                start_pos,
-            ),
-            '/' => {
-                position.advance();
-                if position.peek().map(|p| p.1) == Some('/') {
-                    eat_comment(&mut position, &start_pos);
-                } else {
-                    tokens.push(make_single_tok(TokenValue::Slash, start_pos));
-                }
-            }
-            '"' => tokens.push(string_token(&mut position, &start)?),
-            c if c.is_whitespace() => position.advance(),
-            c if c.is_numeric() => tokens.push(number_token(&mut position, &start_pos)?),
-            c if c.is_alphabetic() => {
-                tokens.push(identifier_or_reserved(&mut position, &start_pos))
-            }
-            c => {
-                return Err(LexError {
-                    error: LexErrorValue::UnknownChar(c),
-                    start: start_pos,
-                    end: start_pos,
-                })
-            }
-        }
-    }
-
-    Ok(tokens)
 }
 
 #[test]
 fn test_lex() {
     // Token salad
+    let mut salad_lexer = Lexer::new("{} hello () .-+; !!=! <><=>=>");
+    assert_eq!(salad_lexer.lex(), Ok(()));
     assert_eq!(
-        lex("{} hello () .-+; !!=! <><=>=>"),
-        Ok(vec![
+        salad_lexer.tokens,
+        vec![
             Token {
                 value: TokenValue::LeftBrace,
                 start: Position { line: 1, column: 1 },
@@ -436,13 +510,15 @@ fn test_lex() {
                     column: 29
                 }
             },
-        ])
+        ]
     );
 
     // Comments
+    let mut comments_lexer = Lexer::new("/123//Hello\n//Ignore\n456");
+    assert_eq!(comments_lexer.lex(), Ok(()));
     assert_eq!(
-        lex("/123//Hello\n//Ignore\n456"),
-        Ok(vec![
+        comments_lexer.tokens,
+        vec![
             Token {
                 value: TokenValue::Slash,
                 start: Position { line: 1, column: 1 },
@@ -458,12 +534,12 @@ fn test_lex() {
                 start: Position { line: 3, column: 1 },
                 end: Position { line: 3, column: 3 }
             },
-        ])
+        ]
     );
 
     // Unknown char
     assert_eq!(
-        lex("™"),
+        Lexer::new("™").lex(),
         Err(LexError {
             error: LexErrorValue::UnknownChar('™'),
             start: Position { line: 1, column: 1 },
@@ -473,111 +549,11 @@ fn test_lex() {
 
     // Unterminated string
     assert_eq!(
-        lex("\"nope"),
+        Lexer::new("\"nope").lex(),
         Err(LexError {
             error: LexErrorValue::UnterminatedString,
             start: Position { line: 1, column: 1 },
             end: Position { line: 1, column: 5 }
         })
     );
-}
-
-fn eat_comment(position: &mut LexPosition, start: &Position) {
-    while let Some(&(pos, _)) = position.peek() {
-        if pos.line != start.line {
-            return;
-        }
-        position.advance();
-    }
-}
-
-fn string_token(
-    position: &mut LexPosition,
-    &(start, start_char): &(Position, char),
-) -> Result<Token, LexError> {
-    // Invariant: we should be on the opening quote
-    assert_eq!(start_char, '"');
-    position.advance();
-
-    let mut str_vec = Vec::new();
-    let mut last_pos = start;
-    while let Some(&(pos, c)) = position.peek() {
-        position.advance();
-        if c == '"' {
-            return Ok(Token {
-                value: TokenValue::String(String::from_iter(str_vec)),
-                start,
-                end: pos,
-            });
-        }
-        str_vec.push(c);
-        last_pos = pos;
-    }
-
-    // If we get here, we ran out of input before we saw a closing
-    // quote
-    Err(LexError { error: LexErrorValue::UnterminatedString, start, end: last_pos })
-}
-
-fn number_token(position: &mut LexPosition, &start: &Position) -> Result<Token, LexError> {
-    let mut end = start;
-    let mut num_chars = Vec::<char>::new();
-    while let Some(&(pos, c)) = position.peek() {
-        if c.is_numeric() || c == '.' {
-            num_chars.push(c);
-            end = pos;
-            position.advance();
-        } else {
-            break;
-        }
-    }
-
-    let num_str = String::from_iter(num_chars);
-    num_str
-        .parse::<f64>()
-        .map(|f| Token {
-            value: TokenValue::Number(f),
-            start,
-            end,
-        })
-        .map_err(|err| LexError {
-            error: LexErrorValue::ParseFloatError(num_str, err),
-            start,
-            end,
-        })
-}
-
-fn identifier_or_reserved(position: &mut LexPosition, &start: &Position) -> Token {
-    let mut end = start;
-    let mut chars = Vec::<char>::new();
-    while let Some(&(pos, c)) = position.peek() {
-        if c.is_alphanumeric() {
-            chars.push(c);
-            end = pos;
-            position.advance();
-        } else {
-            break;
-        }
-    }
-
-    let value = match String::from_iter(chars).as_str() {
-        "and" => TokenValue::And,
-        "class" => TokenValue::Class,
-        "else" => TokenValue::Else,
-        "false" => TokenValue::False,
-        "for" => TokenValue::For,
-        "fun" => TokenValue::Fun,
-        "if" => TokenValue::If,
-        "nil" => TokenValue::Nil,
-        "or" => TokenValue::Or,
-        "print" => TokenValue::Print,
-        "return" => TokenValue::Return,
-        "super" => TokenValue::Super,
-        "this" => TokenValue::This,
-        "true" => TokenValue::True,
-        "var" => TokenValue::Var,
-        "while" => TokenValue::While,
-        s => TokenValue::Identifier(s.to_string()),
-    };
-    Token { value, start, end }
 }

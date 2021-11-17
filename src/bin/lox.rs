@@ -11,5 +11,12 @@ fn main() {
     }
 
     let program = &args[0];
-    println!("{:#?}", lexer::lex(program));
+    let mut lexer = lexer::Lexer::new(program);
+    match lexer.lex() {
+        Ok(()) => println!("{:#?}", lexer.tokens),
+        Err(err) => {
+            eprintln!("ERROR: {:#?}", err);
+            std::process::exit(1);
+        }
+    }
 }
