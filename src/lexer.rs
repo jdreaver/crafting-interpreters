@@ -70,7 +70,14 @@ pub enum TokenValue {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum LexError {
+pub struct LexError {
+    error: LexErrorValue,
+    start: Position,
+    end: Position,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum LexErrorValue {
     UnknownChar(char),
     ParseFloatError(String, ParseFloatError),
     UnterminatedString,
@@ -241,7 +248,13 @@ pub fn lex<S: Into<String>>(source: S) -> Result<Vec<Token>, LexError> {
             c if c.is_alphabetic() => {
                 tokens.push(identifier_or_reserved(&mut position, &start_pos))
             }
-            c => return Err(LexError::UnknownChar(c)),
+            c => {
+                return Err(LexError {
+                    error: LexErrorValue::UnknownChar(c),
+                    start: start_pos,
+                    end: start_pos,
+                })
+            }
         }
     }
 
@@ -448,10 +461,24 @@ fn test_lex() {
         ])
     );
 
+    // Unknown char
+    assert_eq!(
+        lex("™"),
+        Err(LexError {
+            error: LexErrorValue::UnknownChar('™'),
+            start: Position { line: 1, column: 1 },
+            end: Position { line: 1, column: 1 }
+        })
+    );
+
     // Unterminated string
     assert_eq!(
-        lex("\"nope").map(|ts| ts.into_iter().map(|t| t.value).collect::<Vec<_>>()),
-        Err(LexError::UnterminatedString)
+        lex("\"nope"),
+        Err(LexError {
+            error: LexErrorValue::UnterminatedString,
+            start: Position { line: 1, column: 1 },
+            end: Position { line: 1, column: 5 }
+        })
     );
 }
 
@@ -473,6 +500,7 @@ fn string_token(
     position.advance();
 
     let mut str_vec = Vec::new();
+    let mut last_pos = start;
     while let Some(&(pos, c)) = position.peek() {
         position.advance();
         if c == '"' {
@@ -483,11 +511,12 @@ fn string_token(
             });
         }
         str_vec.push(c);
+        last_pos = pos;
     }
 
     // If we get here, we ran out of input before we saw a closing
     // quote
-    Err(LexError::UnterminatedString)
+    Err(LexError { error: LexErrorValue::UnterminatedString, start, end: last_pos })
 }
 
 fn number_token(position: &mut LexPosition, &start: &Position) -> Result<Token, LexError> {
@@ -511,7 +540,11 @@ fn number_token(position: &mut LexPosition, &start: &Position) -> Result<Token, 
             start,
             end,
         })
-        .map_err(|err| LexError::ParseFloatError(num_str, err))
+        .map_err(|err| LexError {
+            error: LexErrorValue::ParseFloatError(num_str, err),
+            start,
+            end,
+        })
 }
 
 fn identifier_or_reserved(position: &mut LexPosition, &start: &Position) -> Token {
