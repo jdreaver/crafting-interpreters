@@ -97,7 +97,26 @@ impl Parser {
     ///                | "(" expression ")" ;
     /// ```
     fn parse_expression(&mut self) -> Result<Expression, ParseError> {
-        self.parse_unary()
+        self.parse_factor()
+    }
+
+    fn parse_factor(&mut self) -> Result<Expression, ParseError> {
+        let lhs = self.parse_unary()?;
+        match self.peek() {
+            None => Ok(lhs),
+            Some(tok) => match tok.value {
+                TokenValue::Slash => self.parse_factor_inner(lhs, InfixOperator::Divide),
+                TokenValue::Star => self.parse_factor_inner(lhs, InfixOperator::Times),
+                _ => Ok(lhs),
+            }
+        }
+    }
+
+    fn parse_factor_inner(&mut self, lhs: Expression, op: InfixOperator) -> Result<Expression, ParseError> {
+        self.advance();
+        let lhs = Box::new(lhs);
+        let rhs = Box::new(self.parse_factor()?);
+        Ok(Expression::Infix{lhs, op, rhs})
     }
 
     fn parse_unary(&mut self) -> Result<Expression, ParseError> {
