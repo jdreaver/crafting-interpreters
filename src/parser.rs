@@ -100,29 +100,17 @@ impl Parser {
         self.parse_equality()
     }
 
-    // TODO: DRY lots of these, they look the same
     fn parse_equality(&mut self) -> Result<Expression, ParseError> {
         let lhs = self.parse_comparison()?;
         // TODO: DRY a "peek_or" function?
         match self.peek() {
             None => Ok(lhs),
             Some(tok) => match tok.value {
-                TokenValue::EqualEqual => self.parse_equality_inner(lhs, InfixOperator::Equals),
-                TokenValue::BangEqual => self.parse_equality_inner(lhs, InfixOperator::NotEquals),
+                TokenValue::EqualEqual => self.parse_infix_inner(lhs, InfixOperator::Equals, Parser::parse_equality),
+                TokenValue::BangEqual => self.parse_infix_inner(lhs, InfixOperator::NotEquals, Parser::parse_equality),
                 _ => Ok(lhs),
             },
         }
-    }
-
-    fn parse_equality_inner(
-        &mut self,
-        lhs: Expression,
-        op: InfixOperator,
-    ) -> Result<Expression, ParseError> {
-        self.advance();
-        let lhs = Box::new(lhs);
-        let rhs = Box::new(self.parse_equality()?);
-        Ok(Expression::Infix { op, lhs, rhs })
     }
 
     fn parse_comparison(&mut self) -> Result<Expression, ParseError> {
@@ -130,24 +118,13 @@ impl Parser {
         match self.peek() {
             None => Ok(lhs),
             Some(tok) => match tok.value {
-                TokenValue::Less => self.parse_comparison_inner(lhs, InfixOperator::Less),
-                TokenValue::LessEqual => self.parse_comparison_inner(lhs, InfixOperator::LessEqual),
-                TokenValue::Greater => self.parse_comparison_inner(lhs, InfixOperator::Greater),
-                TokenValue::GreaterEqual => self.parse_comparison_inner(lhs, InfixOperator::GreaterEqual),
+                TokenValue::Less => self.parse_infix_inner(lhs, InfixOperator::Less, Parser::parse_comparison),
+                TokenValue::LessEqual => self.parse_infix_inner(lhs, InfixOperator::LessEqual, Parser::parse_comparison),
+                TokenValue::Greater => self.parse_infix_inner(lhs, InfixOperator::Greater, Parser::parse_comparison),
+                TokenValue::GreaterEqual => self.parse_infix_inner(lhs, InfixOperator::GreaterEqual, Parser::parse_comparison),
                 _ => Ok(lhs),
             },
         }
-    }
-
-    fn parse_comparison_inner(
-        &mut self,
-        lhs: Expression,
-        op: InfixOperator,
-    ) -> Result<Expression, ParseError> {
-        self.advance();
-        let lhs = Box::new(lhs);
-        let rhs = Box::new(self.parse_comparison()?);
-        Ok(Expression::Infix { op, lhs, rhs })
     }
 
     fn parse_term(&mut self) -> Result<Expression, ParseError> {
@@ -155,22 +132,11 @@ impl Parser {
         match self.peek() {
             None => Ok(lhs),
             Some(tok) => match tok.value {
-                TokenValue::Plus => self.parse_term_inner(lhs, InfixOperator::Plus),
-                TokenValue::Minus => self.parse_term_inner(lhs, InfixOperator::Minus),
+                TokenValue::Plus => self.parse_infix_inner(lhs, InfixOperator::Plus, Parser::parse_term),
+                TokenValue::Minus => self.parse_infix_inner(lhs, InfixOperator::Minus, Parser::parse_term),
                 _ => Ok(lhs),
             },
         }
-    }
-
-    fn parse_term_inner(
-        &mut self,
-        lhs: Expression,
-        op: InfixOperator,
-    ) -> Result<Expression, ParseError> {
-        self.advance();
-        let lhs = Box::new(lhs);
-        let rhs = Box::new(self.parse_term()?);
-        Ok(Expression::Infix { op, lhs, rhs })
     }
 
     fn parse_factor(&mut self) -> Result<Expression, ParseError> {
@@ -178,21 +144,22 @@ impl Parser {
         match self.peek() {
             None => Ok(lhs),
             Some(tok) => match tok.value {
-                TokenValue::Slash => self.parse_factor_inner(lhs, InfixOperator::Divide),
-                TokenValue::Star => self.parse_factor_inner(lhs, InfixOperator::Times),
+                TokenValue::Slash => self.parse_infix_inner(lhs, InfixOperator::Divide, Parser::parse_factor),
+                TokenValue::Star => self.parse_infix_inner(lhs, InfixOperator::Times, Parser::parse_factor),
                 _ => Ok(lhs),
             },
         }
     }
 
-    fn parse_factor_inner(
+    fn parse_infix_inner(
         &mut self,
         lhs: Expression,
         op: InfixOperator,
+        parse_rhs: fn(&mut Parser) -> Result<Expression, ParseError>,
     ) -> Result<Expression, ParseError> {
         self.advance();
         let lhs = Box::new(lhs);
-        let rhs = Box::new(self.parse_factor()?);
+        let rhs = Box::new(parse_rhs(self)?);
         Ok(Expression::Infix { op, lhs, rhs })
     }
 
