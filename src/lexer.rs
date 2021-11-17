@@ -5,11 +5,11 @@
 
 use std::{iter::FromIterator, num::ParseFloatError};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Token {
-    value: TokenValue,
-    start: Position,
-    end: Position,
+    pub(crate) value: TokenValue,
+    pub(crate) start: Position,
+    pub(crate) end: Position,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -18,7 +18,7 @@ pub struct Position {
     column: usize,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TokenValue {
     LeftBrace,
     RightBrace,
