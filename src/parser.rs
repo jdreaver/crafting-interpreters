@@ -1,9 +1,13 @@
 use crate::lexer::{Token, TokenValue};
 
+// TODO: Add positions to Expression and other enums, but make sure to
+// DRY with some kind of Positioned<T> type with the Token and
+// LexError.
+
 #[derive(Debug, PartialEq)]
 pub enum Expression {
     Parens {
-        exp: Box<Expression>,
+        expr: Box<Expression>,
     },
     Infix {
         lhs: Box<Expression>,
@@ -12,7 +16,7 @@ pub enum Expression {
     },
     Unary {
         op: UnaryOperator,
-        exp: Box<Expression>,
+        expr: Box<Expression>,
     },
     Literal(Literal),
 }
@@ -93,13 +97,28 @@ impl Parser {
     ///                | "(" expression ")" ;
     /// ```
     fn parse_expression(&mut self) -> Result<Expression, ParseError> {
-        self.parse_primary()
+        self.parse_unary()
+    }
+
+    fn parse_unary(&mut self) -> Result<Expression, ParseError> {
+        match self.peek_require()? {
+            tok => match tok.value {
+                TokenValue::Bang => self.parse_unary_inner(UnaryOperator::Not),
+                TokenValue::Minus => self.parse_unary_inner(UnaryOperator::Negate),
+                _ => self.parse_primary(),
+            }
+        }
+    }
+
+    fn parse_unary_inner(&mut self, op: UnaryOperator) -> Result<Expression, ParseError> {
+        self.advance();
+        let expr = Box::new(self.parse_unary()?);
+        Ok(Expression::Unary{op, expr})
     }
 
     fn parse_primary(&mut self) -> Result<Expression, ParseError> {
-        match self.peek() {
-            None => Err(ParseError::OutOfInput),
-            Some(tok) => {
+        match self.peek_require()? {
+            tok => {
                 // TODO: This clone is unfortunate (I think? maybe it
                 // is necessary). Try to get rid of it and see what
                 // happens.
@@ -120,9 +139,14 @@ impl Parser {
         }
     }
 
-    /// View the next character but don't advance our current position
+    /// View the next token but don't advance our current position
     fn peek(&self) -> Option<&Token> {
         self.tokens.get(self.index)
+    }
+
+    /// Like peek(), but returns an error if we reach end of input
+    fn peek_require(&self) -> Result<&Token, ParseError> {
+        self.peek().ok_or(ParseError::OutOfInput)
     }
 
     fn advance(&mut self) {
