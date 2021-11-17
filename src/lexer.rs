@@ -92,50 +92,23 @@ pub fn lex<S: Into<String>>(source: S) -> Result<Vec<Token>, LexError> {
 
     let mut tokens = Vec::new();
 
-    while let Some(c) = position.peek() {
-        match c {
-            // TODO: Figure out how to DRY single tokens, two char
-            // tokens, etc
-            '{' => {
-                tokens.push(Token::LeftBrace);
-                position.advance();
-            }
-            '}' => {
-                tokens.push(Token::RightBrace);
-                position.advance();
-            }
-            '(' => {
-                tokens.push(Token::LeftParen);
-                position.advance();
-            }
-            ')' => {
-                tokens.push(Token::RightParen);
-                position.advance();
-            }
-            ',' => {
-                tokens.push(Token::Comma);
-                position.advance();
-            }
-            '.' => {
-                tokens.push(Token::Dot);
-                position.advance();
-            }
-            '-' => {
-                tokens.push(Token::Minus);
-                position.advance();
-            }
-            '+' => {
-                tokens.push(Token::Plus);
-                position.advance();
-            }
-            ';' => {
-                tokens.push(Token::Semicolon);
-                position.advance();
-            }
-            '*' => {
-                tokens.push(Token::Star);
-                position.advance();
-            }
+    fn single_tok(position: &mut LexPosition, tokens: &mut Vec<Token>, tok: Token) {
+        tokens.push(tok);
+        position.advance();
+    }
+
+    while let Some(peeked) = position.peek() {
+        match peeked {
+            '{' => single_tok(&mut position, &mut tokens, Token::LeftBrace),
+            '}' => single_tok(&mut position, &mut tokens, Token::RightBrace),
+            '(' => single_tok(&mut position, &mut tokens, Token::LeftParen),
+            ')' => single_tok(&mut position, &mut tokens, Token::RightParen),
+            ',' => single_tok(&mut position, &mut tokens, Token::Comma),
+            '.' => single_tok(&mut position, &mut tokens, Token::Dot),
+            '-' => single_tok(&mut position, &mut tokens, Token::Minus),
+            '+' => single_tok(&mut position, &mut tokens, Token::Plus),
+            ';' => single_tok(&mut position, &mut tokens, Token::Semicolon),
+            '*' => single_tok(&mut position, &mut tokens, Token::Star),
             '!' => {
                 position.advance();
                 if position.peek() == Some(&'=') {
@@ -181,9 +154,7 @@ pub fn lex<S: Into<String>>(source: S) -> Result<Vec<Token>, LexError> {
                 }
             }
             '"' => tokens.push(string_token(&mut position).map(Token::String)?),
-            &c if c.is_whitespace() => {
-                position.advance();
-            }
+            &c if c.is_whitespace() => position.advance(),
             &c if c.is_numeric() => tokens.push(number_token(&mut position).map(Token::Number)?),
             &c if c.is_alphabetic() => tokens.push(identifier_or_reserved(&mut position)),
             &c => return Err(LexError::UnknownChar(c)),
