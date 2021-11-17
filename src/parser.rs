@@ -97,7 +97,57 @@ impl Parser {
     ///                | "(" expression ")" ;
     /// ```
     fn parse_expression(&mut self) -> Result<Expression, ParseError> {
-        self.parse_term()
+        self.parse_equality()
+    }
+
+    // TODO: DRY lots of these, they look the same
+    fn parse_equality(&mut self) -> Result<Expression, ParseError> {
+        let lhs = self.parse_comparison()?;
+        // TODO: DRY a "peek_or" function?
+        match self.peek() {
+            None => Ok(lhs),
+            Some(tok) => match tok.value {
+                TokenValue::EqualEqual => self.parse_equality_inner(lhs, InfixOperator::Equals),
+                TokenValue::BangEqual => self.parse_equality_inner(lhs, InfixOperator::NotEquals),
+                _ => Ok(lhs),
+            },
+        }
+    }
+
+    fn parse_equality_inner(
+        &mut self,
+        lhs: Expression,
+        op: InfixOperator,
+    ) -> Result<Expression, ParseError> {
+        self.advance();
+        let lhs = Box::new(lhs);
+        let rhs = Box::new(self.parse_equality()?);
+        Ok(Expression::Infix { op, lhs, rhs })
+    }
+
+    fn parse_comparison(&mut self) -> Result<Expression, ParseError> {
+        let lhs = self.parse_term()?;
+        match self.peek() {
+            None => Ok(lhs),
+            Some(tok) => match tok.value {
+                TokenValue::Less => self.parse_comparison_inner(lhs, InfixOperator::Less),
+                TokenValue::LessEqual => self.parse_comparison_inner(lhs, InfixOperator::LessEqual),
+                TokenValue::Greater => self.parse_comparison_inner(lhs, InfixOperator::Greater),
+                TokenValue::GreaterEqual => self.parse_comparison_inner(lhs, InfixOperator::GreaterEqual),
+                _ => Ok(lhs),
+            },
+        }
+    }
+
+    fn parse_comparison_inner(
+        &mut self,
+        lhs: Expression,
+        op: InfixOperator,
+    ) -> Result<Expression, ParseError> {
+        self.advance();
+        let lhs = Box::new(lhs);
+        let rhs = Box::new(self.parse_comparison()?);
+        Ok(Expression::Infix { op, lhs, rhs })
     }
 
     fn parse_term(&mut self) -> Result<Expression, ParseError> {
@@ -177,6 +227,18 @@ impl Parser {
                     TokenValue::String(string) => {
                         self.advance();
                         Ok(Expression::Literal(Literal::String(string)))
+                    }
+                    TokenValue::True => {
+                        self.advance();
+                        Ok(Expression::Literal(Literal::True))
+                    }
+                    TokenValue::False => {
+                        self.advance();
+                        Ok(Expression::Literal(Literal::False))
+                    }
+                    TokenValue::Nil => {
+                        self.advance();
+                        Ok(Expression::Literal(Literal::Nil))
                     }
                     TokenValue::LeftParen => self.parenthesized_expression(&tok),
                     _ => Err(ParseError::UnexpectedToken(tok)),
