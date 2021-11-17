@@ -10,8 +10,8 @@ pub enum Expression {
         expr: Box<Expression>,
     },
     Infix {
-        lhs: Box<Expression>,
         op: InfixOperator,
+        lhs: Box<Expression>,
         rhs: Box<Expression>,
     },
     Unary {
@@ -97,7 +97,30 @@ impl Parser {
     ///                | "(" expression ")" ;
     /// ```
     fn parse_expression(&mut self) -> Result<Expression, ParseError> {
-        self.parse_factor()
+        self.parse_term()
+    }
+
+    fn parse_term(&mut self) -> Result<Expression, ParseError> {
+        let lhs = self.parse_factor()?;
+        match self.peek() {
+            None => Ok(lhs),
+            Some(tok) => match tok.value {
+                TokenValue::Plus => self.parse_term_inner(lhs, InfixOperator::Plus),
+                TokenValue::Minus => self.parse_term_inner(lhs, InfixOperator::Minus),
+                _ => Ok(lhs),
+            },
+        }
+    }
+
+    fn parse_term_inner(
+        &mut self,
+        lhs: Expression,
+        op: InfixOperator,
+    ) -> Result<Expression, ParseError> {
+        self.advance();
+        let lhs = Box::new(lhs);
+        let rhs = Box::new(self.parse_term()?);
+        Ok(Expression::Infix { op, lhs, rhs })
     }
 
     fn parse_factor(&mut self) -> Result<Expression, ParseError> {
@@ -108,15 +131,19 @@ impl Parser {
                 TokenValue::Slash => self.parse_factor_inner(lhs, InfixOperator::Divide),
                 TokenValue::Star => self.parse_factor_inner(lhs, InfixOperator::Times),
                 _ => Ok(lhs),
-            }
+            },
         }
     }
 
-    fn parse_factor_inner(&mut self, lhs: Expression, op: InfixOperator) -> Result<Expression, ParseError> {
+    fn parse_factor_inner(
+        &mut self,
+        lhs: Expression,
+        op: InfixOperator,
+    ) -> Result<Expression, ParseError> {
         self.advance();
         let lhs = Box::new(lhs);
         let rhs = Box::new(self.parse_factor()?);
-        Ok(Expression::Infix{lhs, op, rhs})
+        Ok(Expression::Infix { op, lhs, rhs })
     }
 
     fn parse_unary(&mut self) -> Result<Expression, ParseError> {
@@ -125,14 +152,14 @@ impl Parser {
                 TokenValue::Bang => self.parse_unary_inner(UnaryOperator::Not),
                 TokenValue::Minus => self.parse_unary_inner(UnaryOperator::Negate),
                 _ => self.parse_primary(),
-            }
+            },
         }
     }
 
     fn parse_unary_inner(&mut self, op: UnaryOperator) -> Result<Expression, ParseError> {
         self.advance();
         let expr = Box::new(self.parse_unary()?);
-        Ok(Expression::Unary{op, expr})
+        Ok(Expression::Unary { op, expr })
     }
 
     fn parse_primary(&mut self) -> Result<Expression, ParseError> {
