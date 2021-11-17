@@ -97,6 +97,16 @@ pub fn lex<S: Into<String>>(source: S) -> Result<Vec<Token>, LexError> {
         position.advance();
     }
 
+    fn two_char_tok(position: &mut LexPosition, tokens: &mut Vec<Token>, single_tok: Token, c: char, double_tok: Token) {
+        position.advance();
+        if position.peek() == Some(&c) {
+            tokens.push(double_tok);
+            position.advance();
+        } else {
+            tokens.push(single_tok);
+        }
+    }
+
     while let Some(peeked) = position.peek() {
         match peeked {
             '{' => single_tok(&mut position, &mut tokens, Token::LeftBrace),
@@ -109,42 +119,10 @@ pub fn lex<S: Into<String>>(source: S) -> Result<Vec<Token>, LexError> {
             '+' => single_tok(&mut position, &mut tokens, Token::Plus),
             ';' => single_tok(&mut position, &mut tokens, Token::Semicolon),
             '*' => single_tok(&mut position, &mut tokens, Token::Star),
-            '!' => {
-                position.advance();
-                if position.peek() == Some(&'=') {
-                    tokens.push(Token::BangEqual);
-                    position.advance();
-                } else {
-                    tokens.push(Token::Bang);
-                }
-            }
-            '=' => {
-                position.advance();
-                if position.peek() == Some(&'=') {
-                    tokens.push(Token::EqualEqual);
-                    position.advance();
-                } else {
-                    tokens.push(Token::Equal);
-                }
-            }
-            '<' => {
-                position.advance();
-                if position.peek() == Some(&'=') {
-                    tokens.push(Token::LessEqual);
-                    position.advance();
-                } else {
-                    tokens.push(Token::Less);
-                }
-            }
-            '>' => {
-                position.advance();
-                if position.peek() == Some(&'=') {
-                    tokens.push(Token::GreaterEqual);
-                    position.advance();
-                } else {
-                    tokens.push(Token::Greater);
-                }
-            }
+            '!' => two_char_tok(&mut position, &mut tokens, Token::Bang, '=', Token::BangEqual),
+            '=' => two_char_tok(&mut position, &mut tokens, Token::Equal, '=', Token::EqualEqual),
+            '<' => two_char_tok(&mut position, &mut tokens, Token::Less, '=', Token::LessEqual),
+            '>' => two_char_tok(&mut position, &mut tokens, Token::Greater, '=', Token::GreaterEqual),
             '/' => {
                 position.advance();
                 if position.peek() == Some(&'/') {
