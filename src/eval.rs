@@ -50,8 +50,8 @@ pub fn evaluate_program(program: Program) -> Result<(), EvalError> {
 pub fn evaluate_expression(expr: Expression) -> Result<ExpressionResult, EvalError> {
     match expr {
         Expression::Literal(lit) => evaluate_literal(lit),
-        Expression::Unary { op, expr } => evaluate_unary(op, expr),
-        Expression::Infix { op, lhs, rhs } => evaluate_infix(op, lhs, rhs),
+        Expression::Unary { op, expr } => evaluate_unary(op, *expr),
+        Expression::Infix { op, lhs, rhs } => evaluate_infix(op, *lhs, *rhs),
     }
 }
 
@@ -66,8 +66,8 @@ fn evaluate_literal(lit: Literal) -> Result<ExpressionResult, EvalError> {
     }
 }
 
-fn evaluate_unary(op: UnaryOperator, expr: Box<Expression>) -> Result<ExpressionResult, EvalError> {
-    let expr_result = evaluate_expression(*expr)?;
+fn evaluate_unary(op: UnaryOperator, expr: Expression) -> Result<ExpressionResult, EvalError> {
+    let expr_result = evaluate_expression(expr)?;
 
     let incorrect_type_error = Err(EvalError::UnaryIncorrectTypes{
         op: op.clone(),
@@ -89,9 +89,9 @@ fn evaluate_unary(op: UnaryOperator, expr: Box<Expression>) -> Result<Expression
 
 }
 
-fn evaluate_infix(op: InfixOperator, lhs: Box<Expression>, rhs: Box<Expression>) -> Result<ExpressionResult, EvalError> {
-    let lhs_result = evaluate_expression(*lhs)?;
-    let rhs_result = evaluate_expression(*rhs)?;
+fn evaluate_infix(op: InfixOperator, lhs: Expression, rhs: Expression) -> Result<ExpressionResult, EvalError> {
+    let lhs_result = evaluate_expression(lhs)?;
+    let rhs_result = evaluate_expression(rhs)?;
 
     let incorrect_type_error = Err(EvalError::InfixIncorrectTypes{
         op: op.clone(),
@@ -101,14 +101,20 @@ fn evaluate_infix(op: InfixOperator, lhs: Box<Expression>, rhs: Box<Expression>)
 
     match op {
         InfixOperator::Equals => match (&lhs_result, &rhs_result) {
-            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => Ok(ExpressionResult::Bool(x == y)),
+            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
+                #[allow(clippy::float_cmp)]
+                Ok(ExpressionResult::Bool(x == y))
+            },
             (ExpressionResult::String(x), ExpressionResult::String(y)) => Ok(ExpressionResult::Bool(x == y)),
             (ExpressionResult::Bool(x), ExpressionResult::Bool(y)) => Ok(ExpressionResult::Bool(x == y)),
             (ExpressionResult::Nil, ExpressionResult::Nil) => Ok(ExpressionResult::Bool(true)),
             _ => incorrect_type_error,
         }
         InfixOperator::NotEquals => match (&lhs_result, &rhs_result) {
-            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => Ok(ExpressionResult::Bool(x != y)),
+            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
+                #[allow(clippy::float_cmp)]
+                Ok(ExpressionResult::Bool(x != y))
+            },
             (ExpressionResult::String(x), ExpressionResult::String(y)) => Ok(ExpressionResult::Bool(x != y)),
             (ExpressionResult::Bool(x), ExpressionResult::Bool(y)) => Ok(ExpressionResult::Bool(x != y)),
             (ExpressionResult::Nil, ExpressionResult::Nil) => Ok(ExpressionResult::Bool(false)),
