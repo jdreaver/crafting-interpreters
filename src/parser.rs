@@ -4,11 +4,8 @@ use crate::lexer::{Token, TokenValue};
 // DRY with some kind of Positioned<T> type with the Token and
 // LexError.
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
-    Parens {
-        expr: Box<Expression>,
-    },
     Infix {
         op: InfixOperator,
         lhs: Box<Expression>,
@@ -21,7 +18,7 @@ pub enum Expression {
     Literal(Literal),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum InfixOperator {
     Equals,
     NotEquals,
@@ -35,13 +32,13 @@ pub enum InfixOperator {
     Divide,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum UnaryOperator {
     Not,
     Negate,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Literal {
     Number(f64),
     String(String),
@@ -51,7 +48,7 @@ pub enum Literal {
     Nil,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ParseError {
     UnexpectedToken(Token),
     UnexpectedTokenExpected { got: Token, want: TokenValue },

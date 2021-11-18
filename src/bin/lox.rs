@@ -1,5 +1,6 @@
 use std::env;
 
+use lox::eval;
 use lox::lexer;
 use lox::parser;
 
@@ -24,7 +25,16 @@ fn main() {
 
     let mut parser = parser::Parser::new(lexer.tokens);
     match parser.parse() {
-        Ok(expr) => println!("Parsed: {:#?}", expr),
+        Ok(expr) => {
+            println!("Parsed: {:#?}", expr);
+            match eval::evaluate_expression(expr) {
+                Ok(result) => println!("Result: {:?}", result),
+                Err(err) => {
+                    eprintln!("ERROR: {:#?}", err);
+                    std::process::exit(1);
+                }
+            }
+        }
         Err(err) => {
             eprintln!("ERROR: {:#?}", err);
             std::process::exit(1);
