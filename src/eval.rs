@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::parser::{Expression, InfixOperator, UnaryOperator, Literal};
+use crate::parser::{Expression, InfixOperator, UnaryOperator, Literal, Program, Statement};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ExpressionResult {
@@ -33,6 +33,18 @@ pub enum EvalError {
         rhs: ExpressionResult,
     },
     CantProcessIdentifierLiteral(String),
+}
+
+pub fn evaluate_program(program: Program) -> Result<(), EvalError> {
+    for statement in program.statements {
+        match statement {
+            Statement::Expression(expr) => {
+                evaluate_expression(expr)?;
+            },
+            Statement::Print(expr) => println!("{}", evaluate_expression(expr)?),
+        }
+    }
+    Ok(())
 }
 
 pub fn evaluate_expression(expr: Expression) -> Result<ExpressionResult, EvalError> {

@@ -24,15 +24,15 @@ fn main() {
     }
 
     let mut parser = parser::Parser::new(lexer.tokens);
-    let expr = match parser.parse() {
-        Ok(expr) => expr,
+    let program = match parser.parse() {
+        Ok(program) => program,
         Err(err) => {
             eprintln!("ERROR: {:#?}", err);
             std::process::exit(1);
         }
     };
-    match eval::evaluate_expression(expr) {
-        Ok(result) => println!("{}", result),
+    match eval::evaluate_program(program) {
+        Ok(()) => {},
         Err(err) => {
             eprintln!("ERROR: {:#?}", err);
             std::process::exit(1);

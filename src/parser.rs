@@ -1,8 +1,18 @@
 use crate::lexer::{Token, TokenValue};
 
-// TODO: Add positions to Expression and other enums, but make sure to
-// DRY with some kind of Positioned<T> type with the Token and
-// LexError.
+// TODO: Add positions to parsed types, but make sure to DRY with some
+// kind of Positioned<T> type with the Token and LexError.
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Program {
+    pub statements: Vec<Statement>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Statement {
+    Expression(Expression),
+    Print(Expression),
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
@@ -66,17 +76,48 @@ impl Parser {
         Parser { tokens, index: 0 }
     }
 
-    pub fn parse(&mut self) -> Result<Expression, ParseError> {
-        match self.parse_expression() {
-            Ok(expr) => {
-                // Assert not input left
+    pub fn parse(&mut self) -> Result<Program, ParseError> {
+        match self.parse_statements() {
+            Ok(statements) => {
+                // Assert no input left
                 if self.peek().is_some() {
                     Err(ParseError::ExtraInput(self.tokens[self.index..].to_vec()))
                 } else {
-                    Ok(expr)
+                    Ok(Program {statements})
                 }
             }
             Err(err) => Err(err),
+        }
+    }
+
+    pub fn parse_statements(&mut self) -> Result<Vec<Statement>, ParseError> {
+        let mut statements = Vec::new();
+        while !self.at_end() {
+            statements.push(self.parse_statement()?)
+        }
+        Ok(statements)
+    }
+
+    pub fn parse_statement(&mut self) -> Result<Statement, ParseError> {
+        let tok = self.peek_require()?;
+        let stmt = match tok.value {
+            TokenValue::Print => {
+                self.advance();
+                Statement::Print(self.parse_expression()?)
+            }
+            _ => Statement::Expression(self.parse_expression()?),
+        };
+
+        let ending_tok = self.peek_require()?;
+        match ending_tok.value {
+            TokenValue::Semicolon => {
+                self.advance();
+                Ok(stmt)
+            }
+            _ => Err(ParseError::UnexpectedTokenExpected {
+                got: ending_tok.clone(),
+                want: TokenValue::Semicolon,
+            }),
         }
     }
 
@@ -160,12 +201,11 @@ impl Parser {
     }
 
     fn parse_unary(&mut self) -> Result<Expression, ParseError> {
-        match self.peek_require()? {
-            tok => match tok.value {
-                TokenValue::Bang => self.parse_unary_inner(UnaryOperator::Not),
-                TokenValue::Minus => self.parse_unary_inner(UnaryOperator::Negate),
-                _ => self.parse_primary(),
-            },
+        let tok = self.peek_require()?;
+        match tok.value {
+            TokenValue::Bang => self.parse_unary_inner(UnaryOperator::Not),
+            TokenValue::Minus => self.parse_unary_inner(UnaryOperator::Negate),
+            _ => self.parse_primary(),
         }
     }
 
@@ -176,37 +216,30 @@ impl Parser {
     }
 
     fn parse_primary(&mut self) -> Result<Expression, ParseError> {
-        match self.peek_require()? {
-            tok => {
-                // TODO: This clone is unfortunate (I think? maybe it
-                // is necessary). Try to get rid of it and see what
-                // happens.
-                let tok = tok.clone();
-                match tok.value {
-                    TokenValue::Number(num) => {
-                        self.advance();
-                        Ok(Expression::Literal(Literal::Number(num)))
-                    }
-                    TokenValue::String(string) => {
-                        self.advance();
-                        Ok(Expression::Literal(Literal::String(string)))
-                    }
-                    TokenValue::True => {
-                        self.advance();
-                        Ok(Expression::Literal(Literal::True))
-                    }
-                    TokenValue::False => {
-                        self.advance();
-                        Ok(Expression::Literal(Literal::False))
-                    }
-                    TokenValue::Nil => {
-                        self.advance();
-                        Ok(Expression::Literal(Literal::Nil))
-                    }
-                    TokenValue::LeftParen => self.parenthesized_expression(&tok),
-                    _ => Err(ParseError::UnexpectedToken(tok)),
-                }
+        let tok = self.peek_require()?.clone(); // TODO Try to remove clone() here
+        match tok.value {
+            TokenValue::Number(num) => {
+                self.advance();
+                Ok(Expression::Literal(Literal::Number(num)))
             }
+            TokenValue::String(string) => {
+                self.advance();
+                Ok(Expression::Literal(Literal::String(string)))
+            }
+            TokenValue::True => {
+                self.advance();
+                Ok(Expression::Literal(Literal::True))
+            }
+            TokenValue::False => {
+                self.advance();
+                Ok(Expression::Literal(Literal::False))
+            }
+            TokenValue::Nil => {
+                self.advance();
+                Ok(Expression::Literal(Literal::Nil))
+            }
+            TokenValue::LeftParen => self.parenthesized_expression(&tok),
+            _ => Err(ParseError::UnexpectedToken(tok)),
         }
     }
 
@@ -218,6 +251,10 @@ impl Parser {
     /// Like peek(), but returns an error if we reach end of input
     fn peek_require(&self) -> Result<&Token, ParseError> {
         self.peek().ok_or(ParseError::OutOfInput)
+    }
+
+    fn at_end(&self) -> bool {
+        self.peek().is_none()
     }
 
     fn advance(&mut self) {
