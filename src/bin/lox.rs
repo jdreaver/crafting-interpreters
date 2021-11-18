@@ -16,7 +16,7 @@ fn main() {
 
     let mut lexer = lexer::Lexer::new(program);
     match lexer.lex() {
-        Ok(()) => println!("Lexer success: {:#?}", lexer.tokens),
+        Ok(()) => {},
         Err(err) => {
             eprintln!("ERROR: {:#?}", err);
             std::process::exit(1);
@@ -24,17 +24,15 @@ fn main() {
     }
 
     let mut parser = parser::Parser::new(lexer.tokens);
-    match parser.parse() {
-        Ok(expr) => {
-            println!("Parsed: {:#?}", expr);
-            match eval::evaluate_expression(expr) {
-                Ok(result) => println!("Result: {:?}", result),
-                Err(err) => {
-                    eprintln!("ERROR: {:#?}", err);
-                    std::process::exit(1);
-                }
-            }
+    let expr = match parser.parse() {
+        Ok(expr) => expr,
+        Err(err) => {
+            eprintln!("ERROR: {:#?}", err);
+            std::process::exit(1);
         }
+    };
+    match eval::evaluate_expression(expr) {
+        Ok(result) => println!("{}", result),
         Err(err) => {
             eprintln!("ERROR: {:#?}", err);
             std::process::exit(1);

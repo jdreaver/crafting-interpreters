@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::parser::{Expression, InfixOperator, UnaryOperator, Literal};
 
 #[derive(Debug, PartialEq, Clone)]
@@ -6,6 +8,17 @@ pub enum ExpressionResult {
     String(String),
     Bool(bool),
     Nil,
+}
+
+impl fmt::Display for ExpressionResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExpressionResult::Number(x) => write!(f, "{}", x),
+            ExpressionResult::String(x) => write!(f, "\"{}\"", x),
+            ExpressionResult::Bool(x) => write!(f, "{}", x),
+            ExpressionResult::Nil => write!(f, "nil"),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
