@@ -102,7 +102,6 @@ impl Parser {
 
     fn parse_equality(&mut self) -> Result<Expression, ParseError> {
         let lhs = self.parse_comparison()?;
-        // TODO: DRY a "peek_or" function?
         match self.peek() {
             None => Ok(lhs),
             Some(tok) => match tok.value {
