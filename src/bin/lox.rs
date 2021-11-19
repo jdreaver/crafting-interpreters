@@ -17,7 +17,7 @@ fn main() {
 
     let mut lexer = lexer::Lexer::new(program);
     match lexer.lex() {
-        Ok(()) => {},
+        Ok(()) => {}
         Err(err) => {
             eprintln!("ERROR: {:#?}", err);
             std::process::exit(1);
@@ -33,7 +33,7 @@ fn main() {
         }
     };
     match eval::evaluate_program(program, &mut io::stdout()) {
-        Ok(()) => {},
+        Ok(()) => {}
         Err(err) => {
             eprintln!("ERROR: {:#?}", err);
             std::process::exit(1);

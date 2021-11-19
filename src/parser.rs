@@ -16,7 +16,7 @@ pub enum Statement {
         identifier: String,
         expr: Option<Expression>,
     },
-    Block(Vec::<Statement>),
+    Block(Vec<Statement>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -97,7 +97,7 @@ impl Parser {
         if self.peek().is_some() {
             Err(ParseError::ExtraInput(self.tokens[self.index..].to_vec()))
         } else {
-            Ok(Program {statements})
+            Ok(Program { statements })
         }
     }
 
@@ -122,7 +122,7 @@ impl Parser {
             _ => {
                 return Err(ParseError::UnexpectedTokenExpected {
                     got: ident_token.clone(),
-                    want: TokenValue::Identifier("IDENTIFIER".to_string())
+                    want: TokenValue::Identifier("IDENTIFIER".to_string()),
                 })
             }
         };
@@ -157,7 +157,7 @@ impl Parser {
                 let expr = self.parse_expression()?;
                 self.expect_semicolon()?;
                 Ok(Statement::Expression(expr))
-            },
+            }
         }
     }
 
@@ -224,9 +224,8 @@ impl Parser {
                     Ok(Expression::Assignment { target, expr })
                 }
                 _ => Ok(lvalue),
-            }
+            },
         }
-
     }
 
     fn parse_equality(&mut self) -> Result<Expression, ParseError> {
@@ -234,8 +233,12 @@ impl Parser {
         match self.peek() {
             None => Ok(lhs),
             Some(tok) => match tok.value {
-                TokenValue::EqualEqual => self.parse_infix_inner(lhs, InfixOperator::Equals, Parser::parse_equality),
-                TokenValue::BangEqual => self.parse_infix_inner(lhs, InfixOperator::NotEquals, Parser::parse_equality),
+                TokenValue::EqualEqual => {
+                    self.parse_infix_inner(lhs, InfixOperator::Equals, Parser::parse_equality)
+                }
+                TokenValue::BangEqual => {
+                    self.parse_infix_inner(lhs, InfixOperator::NotEquals, Parser::parse_equality)
+                }
                 _ => Ok(lhs),
             },
         }
@@ -246,10 +249,20 @@ impl Parser {
         match self.peek() {
             None => Ok(lhs),
             Some(tok) => match tok.value {
-                TokenValue::Less => self.parse_infix_inner(lhs, InfixOperator::Less, Parser::parse_comparison),
-                TokenValue::LessEqual => self.parse_infix_inner(lhs, InfixOperator::LessEqual, Parser::parse_comparison),
-                TokenValue::Greater => self.parse_infix_inner(lhs, InfixOperator::Greater, Parser::parse_comparison),
-                TokenValue::GreaterEqual => self.parse_infix_inner(lhs, InfixOperator::GreaterEqual, Parser::parse_comparison),
+                TokenValue::Less => {
+                    self.parse_infix_inner(lhs, InfixOperator::Less, Parser::parse_comparison)
+                }
+                TokenValue::LessEqual => {
+                    self.parse_infix_inner(lhs, InfixOperator::LessEqual, Parser::parse_comparison)
+                }
+                TokenValue::Greater => {
+                    self.parse_infix_inner(lhs, InfixOperator::Greater, Parser::parse_comparison)
+                }
+                TokenValue::GreaterEqual => self.parse_infix_inner(
+                    lhs,
+                    InfixOperator::GreaterEqual,
+                    Parser::parse_comparison,
+                ),
                 _ => Ok(lhs),
             },
         }
@@ -260,8 +273,12 @@ impl Parser {
         match self.peek() {
             None => Ok(lhs),
             Some(tok) => match tok.value {
-                TokenValue::Plus => self.parse_infix_inner(lhs, InfixOperator::Plus, Parser::parse_term),
-                TokenValue::Minus => self.parse_infix_inner(lhs, InfixOperator::Minus, Parser::parse_term),
+                TokenValue::Plus => {
+                    self.parse_infix_inner(lhs, InfixOperator::Plus, Parser::parse_term)
+                }
+                TokenValue::Minus => {
+                    self.parse_infix_inner(lhs, InfixOperator::Minus, Parser::parse_term)
+                }
                 _ => Ok(lhs),
             },
         }
@@ -272,8 +289,12 @@ impl Parser {
         match self.peek() {
             None => Ok(lhs),
             Some(tok) => match tok.value {
-                TokenValue::Slash => self.parse_infix_inner(lhs, InfixOperator::Divide, Parser::parse_factor),
-                TokenValue::Star => self.parse_infix_inner(lhs, InfixOperator::Times, Parser::parse_factor),
+                TokenValue::Slash => {
+                    self.parse_infix_inner(lhs, InfixOperator::Divide, Parser::parse_factor)
+                }
+                TokenValue::Star => {
+                    self.parse_infix_inner(lhs, InfixOperator::Times, Parser::parse_factor)
+                }
                 _ => Ok(lhs),
             },
         }
@@ -389,42 +410,44 @@ mod tests {
             assert_eq!(program, Ok(expected));
         }
 
-        assert_helper("1 + 1;", Program {
-            statements: vec![
-                Statement::Expression(
-                    Expression::Infix {
-                        op: InfixOperator::Plus,
-                        lhs: Box::new(Expression::Literal(Literal::Number(1.0))),
-                        rhs: Box::new(Expression::Literal(Literal::Number(1.0))),
-                    }
-                )
-            ],
-        });
+        assert_helper(
+            "1 + 1;",
+            Program {
+                statements: vec![Statement::Expression(Expression::Infix {
+                    op: InfixOperator::Plus,
+                    lhs: Box::new(Expression::Literal(Literal::Number(1.0))),
+                    rhs: Box::new(Expression::Literal(Literal::Number(1.0))),
+                })],
+            },
+        );
 
-        assert_helper("{1;}", Program {
-            statements: vec![
-                Statement::Block(
-                    vec![
-                        Statement::Expression(Expression::Literal(Literal::Number(1.0))),
-                    ],
-                )
-            ],
-        });
+        assert_helper(
+            "{1;}",
+            Program {
+                statements: vec![Statement::Block(vec![Statement::Expression(
+                    Expression::Literal(Literal::Number(1.0)),
+                )])],
+            },
+        );
 
-        let x_eq_1 = Statement::Declaration{
+        let x_eq_1 = Statement::Declaration {
             identifier: "x".to_string(),
             expr: Some(Expression::Literal(Literal::Number(1.0))),
         };
-        assert_helper("var x = 1;", Program {
-            statements: vec![x_eq_1.clone()],
-        });
-
-        let print_bob = Statement::Print(
-            Expression::Literal(Literal::Identifier("bob".to_string()))
+        assert_helper(
+            "var x = 1;",
+            Program {
+                statements: vec![x_eq_1.clone()],
+            },
         );
-        assert_helper("var x = 1;\nprint bob;", Program {
-            statements: vec![x_eq_1, print_bob],
-        });
 
+        let print_bob =
+            Statement::Print(Expression::Literal(Literal::Identifier("bob".to_string())));
+        assert_helper(
+            "var x = 1;\nprint bob;",
+            Program {
+                statements: vec![x_eq_1, print_bob],
+            },
+        );
     }
- }
+}

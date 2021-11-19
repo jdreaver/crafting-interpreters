@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::io::Write;
 
-use crate::parser::{Expression, InfixOperator, UnaryOperator, Literal, Program, Statement};
+use crate::parser::{Expression, InfixOperator, Literal, Program, Statement, UnaryOperator};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ExpressionResult {
@@ -50,7 +50,9 @@ impl Environment {
     }
 
     fn current_scope(&mut self) -> &mut HashMap<String, ExpressionResult> {
-        self.scopes.last_mut().expect("internal Environment error: no current scope!")
+        self.scopes
+            .last_mut()
+            .expect("internal Environment error: no current scope!")
     }
 
     fn add_scope(&mut self) {
@@ -58,18 +60,21 @@ impl Environment {
     }
 
     fn pop_scope(&mut self) {
-        self.scopes.pop().expect("internal Environment error: popped too many scopes! None left");
+        self.scopes
+            .pop()
+            .expect("internal Environment error: popped too many scopes! None left");
     }
 
     fn define(&mut self, identifier: String, value: Option<ExpressionResult>) {
-        self.current_scope().insert(identifier, value.unwrap_or(ExpressionResult::Nil));
+        self.current_scope()
+            .insert(identifier, value.unwrap_or(ExpressionResult::Nil));
     }
 
     fn identifier_value(&self, identifier: &str) -> Result<ExpressionResult, EvalError> {
         // Check scopes starting with innermost scope
         for scope in self.scopes.iter().rev() {
             if let Some(val) = scope.get(identifier) {
-                return Ok(val.clone())
+                return Ok(val.clone());
             }
         }
 
@@ -81,7 +86,7 @@ impl Environment {
         for scope in self.scopes.iter_mut().rev() {
             if scope.get(identifier).is_some() {
                 scope.insert(identifier.to_string(), value);
-                return Ok(())
+                return Ok(());
             }
         }
         Err(EvalError::UnknownIdentifer(identifier.to_string()))
@@ -93,20 +98,26 @@ pub fn evaluate_program<W: Write>(program: Program, out: &mut W) -> Result<(), E
     evaluate_statements(program.statements, out, &mut env)
 }
 
-fn evaluate_statements<W: Write>(statements: Vec::<Statement>, out: &mut W, env: &mut Environment) -> Result<(), EvalError> {
+fn evaluate_statements<W: Write>(
+    statements: Vec<Statement>,
+    out: &mut W,
+    env: &mut Environment,
+) -> Result<(), EvalError> {
     for statement in statements {
         match statement {
             Statement::Expression(expr) => {
                 evaluate_expression(expr, env)?;
-            },
+            }
             Statement::Print(expr) => {
                 writeln!(out, "{}", evaluate_expression(expr, env)?)
                     .map_err(|err| EvalError::IOError(err.to_string()))?;
             }
-            Statement::Declaration{ identifier, expr } => {
-                let result = expr.map(|expr| evaluate_expression(expr, env)).transpose()?;
+            Statement::Declaration { identifier, expr } => {
+                let result = expr
+                    .map(|expr| evaluate_expression(expr, env))
+                    .transpose()?;
                 env.define(identifier, result);
-            },
+            }
             Statement::Block(stmts) => {
                 env.add_scope();
                 let ret = evaluate_statements(stmts, out, env);
@@ -118,14 +129,17 @@ fn evaluate_statements<W: Write>(statements: Vec::<Statement>, out: &mut W, env:
     Ok(())
 }
 
-fn evaluate_expression(expr: Expression, env: &mut Environment) -> Result<ExpressionResult, EvalError> {
+fn evaluate_expression(
+    expr: Expression,
+    env: &mut Environment,
+) -> Result<ExpressionResult, EvalError> {
     match expr {
         Expression::Parens(expr) => evaluate_expression(*expr, env),
         Expression::Assignment { target, expr } => {
             let val = evaluate_expression(*expr, env)?;
             env.assign(&target, val.clone())?;
             Ok(val)
-        },
+        }
         Expression::Literal(lit) => evaluate_literal(lit, env),
         Expression::Unary { op, expr } => evaluate_unary(op, *expr, env),
         Expression::Infix { op, lhs, rhs } => evaluate_infix(op, *lhs, *rhs, env),
@@ -143,10 +157,14 @@ fn evaluate_literal(lit: Literal, env: &Environment) -> Result<ExpressionResult,
     }
 }
 
-fn evaluate_unary(op: UnaryOperator, expr: Expression, env: &mut Environment) -> Result<ExpressionResult, EvalError> {
+fn evaluate_unary(
+    op: UnaryOperator,
+    expr: Expression,
+    env: &mut Environment,
+) -> Result<ExpressionResult, EvalError> {
     let expr_result = evaluate_expression(expr, env)?;
 
-    let incorrect_type_error = Err(EvalError::UnaryIncorrectTypes{
+    let incorrect_type_error = Err(EvalError::UnaryIncorrectTypes {
         op: op.clone(),
         expr: expr_result.clone(),
     });
@@ -163,73 +181,105 @@ fn evaluate_unary(op: UnaryOperator, expr: Expression, env: &mut Environment) ->
             _ => incorrect_type_error,
         },
     }
-
 }
 
-fn evaluate_infix(op: InfixOperator, lhs: Expression, rhs: Expression, env: &mut Environment) -> Result<ExpressionResult, EvalError> {
+fn evaluate_infix(
+    op: InfixOperator,
+    lhs: Expression,
+    rhs: Expression,
+    env: &mut Environment,
+) -> Result<ExpressionResult, EvalError> {
     let lhs_result = evaluate_expression(lhs, env)?;
     let rhs_result = evaluate_expression(rhs, env)?;
 
-    let incorrect_type_error = Err(EvalError::InfixIncorrectTypes{
+    let incorrect_type_error = Err(EvalError::InfixIncorrectTypes {
         op: op.clone(),
         lhs: lhs_result.clone(),
-        rhs: rhs_result.clone()
+        rhs: rhs_result.clone(),
     });
 
     match op {
         InfixOperator::Equals => match (&lhs_result, &rhs_result) {
-            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
+            (ExpressionResult::Number(x), ExpressionResult::Number(y)) =>
+            {
                 #[allow(clippy::float_cmp)]
                 Ok(ExpressionResult::Bool(x == y))
-            },
-            (ExpressionResult::String(x), ExpressionResult::String(y)) => Ok(ExpressionResult::Bool(x == y)),
-            (ExpressionResult::Bool(x), ExpressionResult::Bool(y)) => Ok(ExpressionResult::Bool(x == y)),
+            }
+            (ExpressionResult::String(x), ExpressionResult::String(y)) => {
+                Ok(ExpressionResult::Bool(x == y))
+            }
+            (ExpressionResult::Bool(x), ExpressionResult::Bool(y)) => {
+                Ok(ExpressionResult::Bool(x == y))
+            }
             (ExpressionResult::Nil, ExpressionResult::Nil) => Ok(ExpressionResult::Bool(true)),
             _ => incorrect_type_error,
-        }
+        },
         InfixOperator::NotEquals => match (&lhs_result, &rhs_result) {
-            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
+            (ExpressionResult::Number(x), ExpressionResult::Number(y)) =>
+            {
                 #[allow(clippy::float_cmp)]
                 Ok(ExpressionResult::Bool(x != y))
-            },
-            (ExpressionResult::String(x), ExpressionResult::String(y)) => Ok(ExpressionResult::Bool(x != y)),
-            (ExpressionResult::Bool(x), ExpressionResult::Bool(y)) => Ok(ExpressionResult::Bool(x != y)),
+            }
+            (ExpressionResult::String(x), ExpressionResult::String(y)) => {
+                Ok(ExpressionResult::Bool(x != y))
+            }
+            (ExpressionResult::Bool(x), ExpressionResult::Bool(y)) => {
+                Ok(ExpressionResult::Bool(x != y))
+            }
             (ExpressionResult::Nil, ExpressionResult::Nil) => Ok(ExpressionResult::Bool(false)),
             _ => incorrect_type_error,
-        }
+        },
         InfixOperator::Less => match (&lhs_result, &rhs_result) {
-            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => Ok(ExpressionResult::Bool(x < y)),
+            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
+                Ok(ExpressionResult::Bool(x < y))
+            }
             _ => incorrect_type_error,
-        }
+        },
         InfixOperator::LessEqual => match (&lhs_result, &rhs_result) {
-            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => Ok(ExpressionResult::Bool(x <= y)),
+            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
+                Ok(ExpressionResult::Bool(x <= y))
+            }
             _ => incorrect_type_error,
-        }
+        },
         InfixOperator::Greater => match (&lhs_result, &rhs_result) {
-            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => Ok(ExpressionResult::Bool(x > y)),
+            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
+                Ok(ExpressionResult::Bool(x > y))
+            }
             _ => incorrect_type_error,
-        }
+        },
         InfixOperator::GreaterEqual => match (&lhs_result, &rhs_result) {
-            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => Ok(ExpressionResult::Bool(x >= y)),
+            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
+                Ok(ExpressionResult::Bool(x >= y))
+            }
             _ => incorrect_type_error,
-        }
+        },
         InfixOperator::Plus => match (&lhs_result, &rhs_result) {
-            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => Ok(ExpressionResult::Number(x + y)),
-            (ExpressionResult::String(x), ExpressionResult::String(y)) => Ok(ExpressionResult::String(x.clone() + y)),
+            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
+                Ok(ExpressionResult::Number(x + y))
+            }
+            (ExpressionResult::String(x), ExpressionResult::String(y)) => {
+                Ok(ExpressionResult::String(x.clone() + y))
+            }
             _ => incorrect_type_error,
-        }
+        },
         InfixOperator::Minus => match (&lhs_result, &rhs_result) {
-            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => Ok(ExpressionResult::Number(x - y)),
+            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
+                Ok(ExpressionResult::Number(x - y))
+            }
             _ => incorrect_type_error,
-        }
+        },
         InfixOperator::Times => match (&lhs_result, &rhs_result) {
-            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => Ok(ExpressionResult::Number(x * y)),
+            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
+                Ok(ExpressionResult::Number(x * y))
+            }
             _ => incorrect_type_error,
-        }
+        },
         InfixOperator::Divide => match (&lhs_result, &rhs_result) {
-            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => Ok(ExpressionResult::Number(x / y)),
+            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
+                Ok(ExpressionResult::Number(x / y))
+            }
             _ => incorrect_type_error,
-        }
+        },
     }
 }
 
@@ -255,13 +305,17 @@ mod tests {
               var x = 2 + 3;
               print x;
               print x + 1;
-            "#, "5\n6\n");
+            "#,
+            "5\n6\n",
+        );
 
         assert_success_output(
             r#"
               var x = 4;
               print !(x - 4 == 0);
-            "#, "false\n");
+            "#,
+            "false\n",
+        );
 
         // Ensure assignment works
         assert_success_output(
@@ -269,7 +323,9 @@ mod tests {
               var x = 3;
               x = 4;
               print x;
-            "#, "4\n");
+            "#,
+            "4\n",
+        );
 
         // Assignment has a side effect and also returns a value
         assert_success_output(
@@ -278,7 +334,9 @@ mod tests {
               print x;
               print x = 4;
               print x;
-            "#, "nil\n4\n4\n");
+            "#,
+            "nil\n4\n4\n",
+        );
 
         // Complex nested scopes
         assert_success_output(
@@ -302,7 +360,8 @@ mod tests {
               print a;
               print b;
               print c;
-            "#, r#""inner a"
+            "#,
+            r#""inner a"
 "outer b"
 "global c"
 "outer a"
@@ -311,7 +370,8 @@ mod tests {
 "global a"
 "global b"
 "global c"
-"#);
+"#,
+        );
 
         // Var shadows in a block, but assignment overwrites
         assert_success_output(
@@ -326,7 +386,9 @@ mod tests {
               }
               print a;
               print b;
-            "#, "2\n2\n1\n2\n");
+            "#,
+            "2\n2\n1\n2\n",
+        );
 
         fn assert_failure_output(input: &str, expected: EvalError) {
             let mut lexer = Lexer::new(input);
