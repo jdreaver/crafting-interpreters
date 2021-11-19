@@ -280,6 +280,7 @@ mod tests {
               print x;
             "#, "nil\n4\n4\n");
 
+        // Complex nested scopes
         assert_success_output(
             r#"
               var a = "global a";
@@ -311,6 +312,21 @@ mod tests {
 "global b"
 "global c"
 "#);
+
+        // Var shadows in a block, but assignment overwrites
+        assert_success_output(
+            r#"
+              var a = 1;
+              var b = 1;
+              {
+                var a = 2;
+                b = 2;
+                print a;
+                print b;
+              }
+              print a;
+              print b;
+            "#, "2\n2\n1\n2\n");
 
         fn assert_failure_output(input: &str, expected: EvalError) {
             let mut lexer = Lexer::new(input);
