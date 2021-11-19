@@ -116,20 +116,20 @@ fn evaluate_statement<W: Write>(
 ) -> Result<(), EvalError> {
     match statement {
         Statement::Expression(expr) => {
-            evaluate_expression(expr, env)?;
+            evaluate_expression(&expr, env)?;
         }
         Statement::Print(expr) => {
-            writeln!(out, "{}", evaluate_expression(expr, env)?)
+            writeln!(out, "{}", evaluate_expression(&expr, env)?)
                 .map_err(|err| EvalError::IOError(err.to_string()))?;
         }
         Statement::Declaration { identifier, expr } => {
             let result = expr
-                .map(|expr| evaluate_expression(expr, env))
+                .map(|expr| evaluate_expression(&expr, env))
                 .transpose()?;
             env.define(identifier, result);
         }
         Statement::If { condition, then_branch, else_branch } => {
-            let condition_result = evaluate_expression(condition, env)?;
+            let condition_result = evaluate_expression(&condition, env)?;
             match (result_truthiness(&condition_result), *else_branch) {
                 (true, _) => evaluate_statement(*then_branch, out, env)?,
                 (false, Some(else_branch)) => evaluate_statement(else_branch, out, env)?,
@@ -147,23 +147,23 @@ fn evaluate_statement<W: Write>(
 }
 
 fn evaluate_expression(
-    expr: Expression,
+    expr: &Expression,
     env: &mut Environment,
 ) -> Result<ExpressionResult, EvalError> {
     match expr {
-        Expression::Parens(expr) => evaluate_expression(*expr, env),
+        Expression::Parens(expr) => evaluate_expression(expr, env),
         Expression::Assignment { target, expr } => {
-            let val = evaluate_expression(*expr, env)?;
+            let val = evaluate_expression(expr, env)?;
             env.assign(&target, val.clone())?;
             Ok(val)
         }
         Expression::Literal(lit) => evaluate_literal(lit, env),
-        Expression::Unary { op, expr } => evaluate_unary(op, *expr, env),
-        Expression::Infix { op, lhs, rhs } => evaluate_infix(op, *lhs, *rhs, env),
+        Expression::Unary { op, expr } => evaluate_unary(op, expr, env),
+        Expression::Infix { op, lhs, rhs } => evaluate_infix(op, lhs, rhs, env),
     }
 }
 
-fn evaluate_literal(lit: Literal, env: &Environment) -> Result<ExpressionResult, EvalError> {
+fn evaluate_literal(lit: &Literal, env: &Environment) -> Result<ExpressionResult, EvalError> {
     match &lit {
         Literal::Number(x) => Ok(ExpressionResult::Number(*x)),
         Literal::String(x) => Ok(ExpressionResult::String(x.clone())),
@@ -175,8 +175,8 @@ fn evaluate_literal(lit: Literal, env: &Environment) -> Result<ExpressionResult,
 }
 
 fn evaluate_unary(
-    op: UnaryOperator,
-    expr: Expression,
+    op: &UnaryOperator,
+    expr: &Expression,
     env: &mut Environment,
 ) -> Result<ExpressionResult, EvalError> {
     let expr_result = evaluate_expression(expr, env)?;
@@ -205,9 +205,9 @@ fn result_truthiness(result: &ExpressionResult) -> bool {
 }
 
 fn evaluate_infix(
-    op: InfixOperator,
-    lhs: Expression,
-    rhs: Expression,
+    op: &InfixOperator,
+    lhs: &Expression,
+    rhs: &Expression,
     env: &mut Environment,
 ) -> Result<ExpressionResult, EvalError> {
     let lhs_result = evaluate_expression(lhs, env)?;
