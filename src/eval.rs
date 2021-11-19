@@ -104,26 +104,43 @@ fn evaluate_statements<W: Write>(
     env: &mut Environment,
 ) -> Result<(), EvalError> {
     for statement in statements {
-        match statement {
-            Statement::Expression(expr) => {
-                evaluate_expression(expr, env)?;
+        evaluate_statement(statement, out, env)?;
+    }
+    Ok(())
+}
+
+fn evaluate_statement<W: Write>(
+    statement: Statement,
+    out: &mut W,
+    env: &mut Environment,
+) -> Result<(), EvalError> {
+    match statement {
+        Statement::Expression(expr) => {
+            evaluate_expression(expr, env)?;
+        }
+        Statement::Print(expr) => {
+            writeln!(out, "{}", evaluate_expression(expr, env)?)
+                .map_err(|err| EvalError::IOError(err.to_string()))?;
+        }
+        Statement::Declaration { identifier, expr } => {
+            let result = expr
+                .map(|expr| evaluate_expression(expr, env))
+                .transpose()?;
+            env.define(identifier, result);
+        }
+        Statement::If { condition, then_branch, else_branch } => {
+            let condition_result = evaluate_expression(condition, env)?;
+            match (result_truthiness(&condition_result), *else_branch) {
+                (true, _) => evaluate_statement(*then_branch, out, env)?,
+                (false, Some(else_branch)) => evaluate_statement(else_branch, out, env)?,
+                _ => {},
             }
-            Statement::Print(expr) => {
-                writeln!(out, "{}", evaluate_expression(expr, env)?)
-                    .map_err(|err| EvalError::IOError(err.to_string()))?;
-            }
-            Statement::Declaration { identifier, expr } => {
-                let result = expr
-                    .map(|expr| evaluate_expression(expr, env))
-                    .transpose()?;
-                env.define(identifier, result);
-            }
-            Statement::Block(stmts) => {
-                env.add_scope();
-                let ret = evaluate_statements(stmts, out, env);
-                env.pop_scope();
-                ret?
-            }
+        }
+        Statement::Block(stmts) => {
+            env.add_scope();
+            let ret = evaluate_statements(stmts, out, env);
+            env.pop_scope();
+            ret?
         }
     }
     Ok(())
@@ -171,15 +188,19 @@ fn evaluate_unary(
 
     match op {
         // Lox
-        UnaryOperator::Not => match &expr_result {
-            ExpressionResult::Nil => Ok(ExpressionResult::Bool(true)),
-            ExpressionResult::Bool(x) => Ok(ExpressionResult::Bool(!x)),
-            _ => Ok(ExpressionResult::Bool(true)),
-        },
+        UnaryOperator::Not => Ok(ExpressionResult::Bool(!result_truthiness(&expr_result))),
         UnaryOperator::Negate => match &expr_result {
             ExpressionResult::Number(x) => Ok(ExpressionResult::Number(-x)),
             _ => incorrect_type_error,
         },
+    }
+}
+
+fn result_truthiness(result: &ExpressionResult) -> bool {
+    match result {
+        ExpressionResult::Nil => false,
+        ExpressionResult::Bool(x) => x.clone(),
+        _ => false,
     }
 }
 
@@ -316,6 +337,10 @@ mod tests {
             "#,
             "false\n",
         );
+
+        assert_success_output("if (1 == 2) print 100; else print 200;", "200\n");
+        assert_success_output("if (1 == 1) print 100;", "100\n");
+        assert_success_output("if (1 == 2) print 100;", "");
 
         // Ensure assignment works
         assert_success_output(

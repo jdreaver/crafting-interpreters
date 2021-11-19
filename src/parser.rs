@@ -16,6 +16,11 @@ pub enum Statement {
         identifier: String,
         expr: Option<Expression>,
     },
+    If {
+        condition: Expression,
+        then_branch: Box<Statement>,
+        else_branch: Box<Option<Statement>>,
+    },
     Block(Vec<Statement>),
 }
 
@@ -136,7 +141,7 @@ impl Parser {
             _ => None,
         };
 
-        self.expect_semicolon()?;
+        self.expect_token(TokenValue::Semicolon)?;
         Ok(Statement::Declaration {
             identifier: identifier.to_string(),
             expr,
@@ -149,16 +154,40 @@ impl Parser {
             TokenValue::Print => {
                 self.advance();
                 let expr = self.parse_expression()?;
-                self.expect_semicolon()?;
+                self.expect_token(TokenValue::Semicolon)?;
                 Ok(Statement::Print(expr))
             }
+            TokenValue::If => self.parse_if(&tok),
             TokenValue::LeftBrace => self.parse_block(&tok),
             _ => {
                 let expr = self.parse_expression()?;
-                self.expect_semicolon()?;
+                self.expect_token(TokenValue::Semicolon)?;
                 Ok(Statement::Expression(expr))
             }
         }
+    }
+
+    fn parse_if(&mut self, start: &Token) -> Result<Statement, ParseError> {
+        assert_eq!(start.value, TokenValue::If);
+        self.advance();
+
+        self.expect_token(TokenValue::LeftParen)?;
+        let condition = self.parse_expression()?;
+        self.expect_token(TokenValue::RightParen)?;
+
+        let then_branch = Box::new(self.parse_statement()?);
+        let else_branch = if self.peek().map(|t| t.value.clone()) == Some(TokenValue::Else) {
+            self.advance();
+            Some(self.parse_statement()?)
+        } else {
+            None
+        };
+
+        Ok(Statement::If {
+            condition,
+            then_branch,
+            else_branch: Box::new(else_branch),
+        })
     }
 
     fn parse_block(&mut self, start: &Token) -> Result<Statement, ParseError> {
@@ -176,17 +205,16 @@ impl Parser {
         Ok(Statement::Block(statements))
     }
 
-    fn expect_semicolon(&mut self) -> Result<(), ParseError> {
+    fn expect_token(&mut self, token_value: TokenValue) -> Result<(), ParseError> {
         let ending_tok = self.peek_require()?;
-        match ending_tok.value {
-            TokenValue::Semicolon => {
-                self.advance();
-                Ok(())
-            }
-            _ => Err(ParseError::UnexpectedTokenExpected {
+        if ending_tok.value == token_value {
+            self.advance();
+            Ok(())
+        } else {
+            Err(ParseError::UnexpectedTokenExpected {
                 got: ending_tok.clone(),
                 want: TokenValue::Semicolon,
-            }),
+            })
         }
     }
 
@@ -382,17 +410,8 @@ impl Parser {
         self.advance();
 
         let expr = self.parse_expression()?;
-        let tok = self.peek_require()?;
-        match tok.value {
-            TokenValue::RightParen => {
-                self.advance();
-                Ok(Expression::Parens(Box::new(expr)))
-            }
-            _ => Err(ParseError::UnexpectedTokenExpected {
-                got: tok.clone(),
-                want: TokenValue::RightParen,
-            }),
-        }
+        self.expect_token(TokenValue::RightParen)?;
+        Ok(Expression::Parens(Box::new(expr)))
     }
 }
 
