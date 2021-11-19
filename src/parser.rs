@@ -55,6 +55,8 @@ pub enum InfixOperator {
     Minus,
     Times,
     Divide,
+    Or,
+    And,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -223,7 +225,9 @@ impl Parser {
     /// ```text
     /// expression     → assignment ;
     /// assignment     → IDENTIFIER "=" assignment
-    ///                | equality ;
+    ///                | logic_or ;
+    /// logic_or       → logic_and ( "or" logic_and )* ;
+    /// logic_and      → equality ( "and" equality )* ;
     /// equality       → comparison ( ( "!=" | "==" ) comparison )* ;
     /// comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
     /// term           → factor ( ( "-" | "+" ) factor )* ;
@@ -238,7 +242,7 @@ impl Parser {
     }
 
     fn parse_assignment(&mut self) -> Result<Expression, ParseError> {
-        let lvalue = self.parse_equality()?;
+        let lvalue = self.parse_logical_or()?;
         match self.peek() {
             None => Ok(lvalue),
             Some(tok) => match tok.value {
@@ -252,6 +256,44 @@ impl Parser {
                     Ok(Expression::Assignment { target, expr })
                 }
                 _ => Ok(lvalue),
+            },
+        }
+    }
+
+    fn parse_logical_or(&mut self) -> Result<Expression, ParseError> {
+        let lhs = self.parse_logical_and()?;
+        match self.peek() {
+            None => Ok(lhs),
+            Some(tok) => match tok.value {
+                TokenValue::Or => {
+                    self.advance();
+                    let rhs = self.parse_logical_and()?;
+                    Ok(Expression::Infix {
+                        op: InfixOperator::Or,
+                        lhs: Box::new(lhs),
+                        rhs: Box::new(rhs),
+                    })
+                }
+                _ => Ok(lhs),
+            },
+        }
+    }
+
+    fn parse_logical_and(&mut self) -> Result<Expression, ParseError> {
+        let lhs = self.parse_equality()?;
+        match self.peek() {
+            None => Ok(lhs),
+            Some(tok) => match tok.value {
+                TokenValue::And => {
+                    self.advance();
+                    let rhs = self.parse_equality()?;
+                    Ok(Expression::Infix {
+                        op: InfixOperator::And,
+                        lhs: Box::new(lhs),
+                        rhs: Box::new(rhs),
+                    })
+                }
+                _ => Ok(lhs),
             },
         }
     }

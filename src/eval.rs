@@ -301,6 +301,8 @@ fn evaluate_infix(
             }
             _ => incorrect_type_error,
         },
+        InfixOperator::Or => todo!(),
+        InfixOperator::And => todo!(),
     }
 }
 
