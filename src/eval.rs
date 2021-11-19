@@ -94,6 +94,7 @@ pub fn evaluate_program<W: Write>(program: Program, out: &mut W) -> Result<(), E
 
 fn evaluate_expression(expr: Expression, env: &mut Environment) -> Result<ExpressionResult, EvalError> {
     match expr {
+        Expression::Parens(expr) => evaluate_expression(*expr, env),
         Expression::Assignment { target, expr } => {
             let val = evaluate_expression(*expr, env)?;
             env.assign(&target, val.clone())?;

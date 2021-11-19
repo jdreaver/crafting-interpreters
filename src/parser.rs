@@ -20,6 +20,7 @@ pub enum Statement {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
+    Parens(Box<Expression>),
     Assignment {
         target: String,
         expr: Box<Expression>,
@@ -353,7 +354,7 @@ impl Parser {
             Some(tok) => match tok.value.clone() {
                 TokenValue::RightParen => {
                     self.advance();
-                    Ok(expr)
+                    Ok(Expression::Parens(Box::new(expr)))
                 }
                 _ => Err(ParseError::UnexpectedTokenExpected {
                     got: tok.clone(),
