@@ -336,3 +336,47 @@ impl Parser {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lexer::Lexer;
+
+    #[test]
+    fn test_parse() {
+        fn assert_helper(input: &str, expected: Program) {
+            let mut lexer = Lexer::new(input);
+            lexer.lex().expect("lexing failed");
+            let program = Parser::new(lexer.tokens).parse();
+            assert_eq!(program, Ok(expected));
+        }
+
+        assert_helper("1 + 1;", Program {
+            statements: vec![
+                Statement::Expression(
+                    Expression::Infix {
+                        op: InfixOperator::Plus,
+                        lhs: Box::new(Expression::Literal(Literal::Number(1.0))),
+                        rhs: Box::new(Expression::Literal(Literal::Number(1.0))),
+                    }
+                )
+            ],
+        });
+
+        let x_eq_1 = Statement::Declaration{
+            identifier: "x".to_string(),
+            expr: Some(Expression::Literal(Literal::Number(1.0))),
+        };
+        assert_helper("var x = 1;", Program {
+            statements: vec![x_eq_1.clone()],
+        });
+
+        let print_bob = Statement::Print(
+            Expression::Literal(Literal::Identifier("bob".to_string()))
+        );
+        assert_helper("var x = 1;\nprint bob;", Program {
+            statements: vec![x_eq_1, print_bob],
+        });
+
+    }
+ }
