@@ -16,6 +16,7 @@ pub enum Statement {
         identifier: String,
         expr: Option<Expression>,
     },
+    Block(Vec::<Statement>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -87,25 +88,17 @@ impl Parser {
     }
 
     pub fn parse(&mut self) -> Result<Program, ParseError> {
-        match self.parse_declarations() {
-            Ok(statements) => {
-                // Assert no input left
-                if self.peek().is_some() {
-                    Err(ParseError::ExtraInput(self.tokens[self.index..].to_vec()))
-                } else {
-                    Ok(Program {statements})
-                }
-            }
-            Err(err) => Err(err),
-        }
-    }
-
-    fn parse_declarations(&mut self) -> Result<Vec<Statement>, ParseError> {
         let mut statements = Vec::new();
         while !self.at_end() {
             statements.push(self.parse_declaration()?)
         }
-        Ok(statements)
+
+        // Assert no input left
+        if self.peek().is_some() {
+            Err(ParseError::ExtraInput(self.tokens[self.index..].to_vec()))
+        } else {
+            Ok(Program {statements})
+        }
     }
 
     fn parse_declaration(&mut self) -> Result<Statement, ParseError> {
@@ -151,17 +144,36 @@ impl Parser {
     }
 
     fn parse_statement(&mut self) -> Result<Statement, ParseError> {
-        let tok = self.peek_require()?;
-        let stmt = match tok.value {
+        let tok = self.peek_require()?.clone();
+        match tok.value {
             TokenValue::Print => {
                 self.advance();
-                Statement::Print(self.parse_expression()?)
+                let expr = self.parse_expression()?;
+                self.expect_semicolon()?;
+                Ok(Statement::Print(expr))
             }
-            _ => Statement::Expression(self.parse_expression()?),
-        };
+            TokenValue::LeftBrace => self.parse_block(&tok),
+            _ => {
+                let expr = self.parse_expression()?;
+                self.expect_semicolon()?;
+                Ok(Statement::Expression(expr))
+            },
+        }
+    }
 
-        self.expect_semicolon()?;
-        Ok(stmt)
+    fn parse_block(&mut self, start: &Token) -> Result<Statement, ParseError> {
+        assert_eq!(start.value, TokenValue::LeftBrace);
+        self.advance();
+
+        let mut statements = Vec::new();
+        while self.peek_require()?.value != TokenValue::RightBrace {
+            statements.push(self.parse_declaration()?);
+        }
+
+        assert_eq!(self.peek_require()?.value, TokenValue::RightBrace);
+        self.advance();
+
+        Ok(Statement::Block(statements))
     }
 
     fn expect_semicolon(&mut self) -> Result<(), ParseError> {
@@ -349,9 +361,8 @@ impl Parser {
         self.advance();
 
         let expr = self.parse_expression()?;
-        match self.peek() {
-            None => Err(ParseError::OutOfInput),
-            Some(tok) => match tok.value.clone() {
+        match self.peek_require()? {
+            tok => match tok.value.clone() {
                 TokenValue::RightParen => {
                     self.advance();
                     Ok(Expression::Parens(Box::new(expr)))
@@ -387,6 +398,16 @@ mod tests {
                         lhs: Box::new(Expression::Literal(Literal::Number(1.0))),
                         rhs: Box::new(Expression::Literal(Literal::Number(1.0))),
                     }
+                )
+            ],
+        });
+
+        assert_helper("{1;}", Program {
+            statements: vec![
+                Statement::Block(
+                    vec![
+                        Statement::Expression(Expression::Literal(Literal::Number(1.0))),
+                    ],
                 )
             ],
         });

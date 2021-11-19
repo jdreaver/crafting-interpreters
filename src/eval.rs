@@ -39,54 +39,84 @@ pub enum EvalError {
 }
 
 struct Environment {
-    identifiers: HashMap<String, ExpressionResult>,
+    scopes: Vec<HashMap<String, ExpressionResult>>,
 }
 
 impl Environment {
     fn new() -> Self {
         Environment {
-            identifiers: HashMap::new(),
+            scopes: vec![HashMap::new()],
         }
+    }
+
+    fn current_scope(&mut self) -> &mut HashMap<String, ExpressionResult> {
+        self.scopes.last_mut().expect("internal Environment error: no current scope!")
+    }
+
+    fn add_scope(&mut self) {
+        self.scopes.push(HashMap::new())
+    }
+
+    fn pop_scope(&mut self) {
+        self.scopes.pop().expect("internal Environment error: popped too many scopes! None left");
     }
 
     fn define(&mut self, identifier: String, value: Option<ExpressionResult>) {
-        self.identifiers.insert(identifier, value.unwrap_or(ExpressionResult::Nil));
+        self.current_scope().insert(identifier, value.unwrap_or(ExpressionResult::Nil));
     }
 
     fn identifier_value(&self, identifier: &String) -> Result<ExpressionResult, EvalError> {
-        match self.identifiers.get(identifier) {
-            Some(val) => Ok(val.clone()),
-            None => Err(EvalError::UnknownIdentifer(identifier.clone())),
+        // Check scopes starting with innermost scope
+        for scope in self.scopes.iter().rev() {
+            match scope.get(identifier) {
+                Some(val) => return Ok(val.clone()),
+                None => {},
+            }
         }
+
+        Err(EvalError::UnknownIdentifer(identifier.clone()))
     }
 
     fn assign(&mut self, identifier: &String, value: ExpressionResult) -> Result<(), EvalError> {
-        match self.identifiers.get(identifier) {
-            Some(_) => {
-                self.identifiers.insert(identifier.clone(), value);
-                Ok(())
+        // Check scopes starting with innermost scope
+        for scope in self.scopes.iter_mut().rev() {
+            match scope.get(identifier) {
+                Some(_) => {
+                    scope.insert(identifier.clone(), value);
+                    return Ok(())
+                }
+                None => {}
             }
-            None => Err(EvalError::UnknownIdentifer(identifier.clone())),
         }
+        Err(EvalError::UnknownIdentifer(identifier.clone()))
     }
-
 }
 
 pub fn evaluate_program<W: Write>(program: Program, out: &mut W) -> Result<(), EvalError> {
     let mut env = Environment::new();
-    for statement in program.statements {
+    evaluate_statements(program.statements, out, &mut env)
+}
+
+fn evaluate_statements<W: Write>(statements: Vec::<Statement>, out: &mut W, env: &mut Environment) -> Result<(), EvalError> {
+    for statement in statements {
         match statement {
             Statement::Expression(expr) => {
-                evaluate_expression(expr, &mut env)?;
+                evaluate_expression(expr, env)?;
             },
             Statement::Print(expr) => {
-                writeln!(out, "{}", evaluate_expression(expr, &mut env)?)
+                writeln!(out, "{}", evaluate_expression(expr, env)?)
                     .map_err(|err| EvalError::IOError(err.to_string()))?;
             }
             Statement::Declaration{ identifier, expr } => {
-                let result = expr.map(|expr| evaluate_expression(expr, &mut env)).transpose()?;
+                let result = expr.map(|expr| evaluate_expression(expr, env)).transpose()?;
                 env.define(identifier, result);
             },
+            Statement::Block(stmts) => {
+                env.add_scope();
+                let ret = evaluate_statements(stmts, out, env);
+                env.pop_scope();
+                ret?
+            }
         }
     }
     Ok(())
@@ -253,6 +283,38 @@ mod tests {
               print x = 4;
               print x;
             "#, "nil\n4\n4\n");
+
+        assert_success_output(
+            r#"
+              var a = "global a";
+              var b = "global b";
+              var c = "global c";
+              {
+                var a = "outer a";
+                var b = "outer b";
+                {
+                  var a = "inner a";
+                  print a;
+                  print b;
+                  print c;
+                }
+                print a;
+                print b;
+                print c;
+              }
+              print a;
+              print b;
+              print c;
+            "#, r#""inner a"
+"outer b"
+"global c"
+"outer a"
+"outer b"
+"global c"
+"global a"
+"global b"
+"global c"
+"#);
 
         fn assert_failure_output(input: &str, expected: EvalError) {
             let mut lexer = Lexer::new(input);
