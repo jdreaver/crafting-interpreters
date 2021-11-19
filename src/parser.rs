@@ -20,6 +20,10 @@ pub enum Statement {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
+    Assignment {
+        target: String,
+        expr: Box<Expression>,
+    },
     Infix {
         op: InfixOperator,
         lhs: Box<Expression>,
@@ -68,6 +72,7 @@ pub enum ParseError {
     UnexpectedTokenExpected { got: Token, want: TokenValue },
     OutOfInput,
     ExtraInput(Vec<Token>),
+    InvalidAssignmentTarget(Expression),
 }
 
 pub struct Parser {
@@ -175,7 +180,9 @@ impl Parser {
     /// Parses an expression using the following grammar and precedence rules:
     ///
     /// ```text
-    /// expression     → equality ;
+    /// expression     → assignment ;
+    /// assignment     → IDENTIFIER "=" assignment
+    ///                | equality ;
     /// equality       → comparison ( ( "!=" | "==" ) comparison )* ;
     /// comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
     /// term           → factor ( ( "-" | "+" ) factor )* ;
@@ -186,7 +193,27 @@ impl Parser {
     ///                | "(" expression ")" ;
     /// ```
     fn parse_expression(&mut self) -> Result<Expression, ParseError> {
-        self.parse_equality()
+        self.parse_assignment()
+    }
+
+    fn parse_assignment(&mut self) -> Result<Expression, ParseError> {
+        let lvalue = self.parse_equality()?;
+        match self.peek() {
+            None => Ok(lvalue),
+            Some(tok) => match tok.value {
+                TokenValue::Equal => {
+                    let target = match lvalue {
+                        Expression::Literal(Literal::Identifier(ident)) => ident.clone(),
+                        _ => return Err(ParseError::InvalidAssignmentTarget(lvalue)),
+                    };
+                    self.advance();
+                    let expr = Box::new(self.parse_assignment()?);
+                    Ok(Expression::Assignment { target, expr })
+                }
+                _ => Ok(lvalue),
+            }
+        }
+
     }
 
     fn parse_equality(&mut self) -> Result<Expression, ParseError> {

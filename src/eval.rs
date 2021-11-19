@@ -59,6 +59,17 @@ impl Environment {
             None => Err(EvalError::UnknownIdentifer(identifier.clone())),
         }
     }
+
+    fn assign(&mut self, identifier: &String, value: ExpressionResult) -> Result<(), EvalError> {
+        match self.identifiers.get(identifier) {
+            Some(_) => {
+                self.identifiers.insert(identifier.clone(), value);
+                Ok(())
+            }
+            None => Err(EvalError::UnknownIdentifer(identifier.clone())),
+        }
+    }
+
 }
 
 pub fn evaluate_program<W: Write>(program: Program, out: &mut W) -> Result<(), EvalError> {
@@ -66,14 +77,14 @@ pub fn evaluate_program<W: Write>(program: Program, out: &mut W) -> Result<(), E
     for statement in program.statements {
         match statement {
             Statement::Expression(expr) => {
-                evaluate_expression(expr, &env)?;
+                evaluate_expression(expr, &mut env)?;
             },
             Statement::Print(expr) => {
-                writeln!(out, "{}", evaluate_expression(expr, &env)?)
+                writeln!(out, "{}", evaluate_expression(expr, &mut env)?)
                     .map_err(|err| EvalError::IOError(err.to_string()))?;
             }
             Statement::Declaration{ identifier, expr } => {
-                let result = expr.map(|expr| evaluate_expression(expr, &env)).transpose()?;
+                let result = expr.map(|expr| evaluate_expression(expr, &mut env)).transpose()?;
                 env.define(identifier, result);
             },
         }
@@ -81,8 +92,13 @@ pub fn evaluate_program<W: Write>(program: Program, out: &mut W) -> Result<(), E
     Ok(())
 }
 
-fn evaluate_expression(expr: Expression, env: &Environment) -> Result<ExpressionResult, EvalError> {
+fn evaluate_expression(expr: Expression, env: &mut Environment) -> Result<ExpressionResult, EvalError> {
     match expr {
+        Expression::Assignment { target, expr } => {
+            let val = evaluate_expression(*expr, env)?;
+            env.assign(&target, val.clone())?;
+            Ok(val)
+        },
         Expression::Literal(lit) => evaluate_literal(lit, env),
         Expression::Unary { op, expr } => evaluate_unary(op, *expr, env),
         Expression::Infix { op, lhs, rhs } => evaluate_infix(op, *lhs, *rhs, env),
@@ -100,7 +116,7 @@ fn evaluate_literal(lit: Literal, env: &Environment) -> Result<ExpressionResult,
     }
 }
 
-fn evaluate_unary(op: UnaryOperator, expr: Expression, env: &Environment) -> Result<ExpressionResult, EvalError> {
+fn evaluate_unary(op: UnaryOperator, expr: Expression, env: &mut Environment) -> Result<ExpressionResult, EvalError> {
     let expr_result = evaluate_expression(expr, env)?;
 
     let incorrect_type_error = Err(EvalError::UnaryIncorrectTypes{
@@ -123,7 +139,7 @@ fn evaluate_unary(op: UnaryOperator, expr: Expression, env: &Environment) -> Res
 
 }
 
-fn evaluate_infix(op: InfixOperator, lhs: Expression, rhs: Expression, env: &Environment) -> Result<ExpressionResult, EvalError> {
+fn evaluate_infix(op: InfixOperator, lhs: Expression, rhs: Expression, env: &mut Environment) -> Result<ExpressionResult, EvalError> {
     let lhs_result = evaluate_expression(lhs, env)?;
     let rhs_result = evaluate_expression(rhs, env)?;
 
@@ -216,10 +232,26 @@ mod tests {
 
         assert_success_output(
             r#"
-              var x = 2 + 3;
+              var x = 4;
+              print !(x - 4 == 0);
+            "#, "false\n");
+
+        // Ensure assignment works
+        assert_success_output(
+            r#"
+              var x = 3;
+              x = 4;
               print x;
-              print x + 1;
-            "#, "5\n6\n");
+            "#, "4\n");
+
+        // Assignment has a side effect and also returns a value
+        assert_success_output(
+            r#"
+              var x;
+              print x;
+              print x = 4;
+              print x;
+            "#, "nil\n4\n4\n");
 
         fn assert_failure_output(input: &str, expected: EvalError) {
             let mut lexer = Lexer::new(input);
@@ -229,6 +261,10 @@ mod tests {
             assert_eq!(evaluate_program(program, &mut buf), Err(expected));
         }
 
+        // Try to print nonexistent variable
         assert_failure_output("print x;", EvalError::UnknownIdentifer("x".to_string()));
+
+        // Assign to nonexistent variable
+        assert_failure_output("x = 4;", EvalError::UnknownIdentifer("x".to_string()));
     }
 }
