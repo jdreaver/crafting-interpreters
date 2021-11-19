@@ -42,6 +42,7 @@ pub fn evaluate_program(program: Program) -> Result<(), EvalError> {
                 evaluate_expression(expr)?;
             },
             Statement::Print(expr) => println!("{}", evaluate_expression(expr)?),
+            Statement::Declaration{ identifier, expr } => println!("DECLARATION {} = {:?}", identifier, expr),
         }
     }
     Ok(())

@@ -12,6 +12,10 @@ pub struct Program {
 pub enum Statement {
     Expression(Expression),
     Print(Expression),
+    Declaration {
+        identifier: String,
+        expr: Option<Expression>,
+    },
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -77,7 +81,7 @@ impl Parser {
     }
 
     pub fn parse(&mut self) -> Result<Program, ParseError> {
-        match self.parse_statements() {
+        match self.parse_declarations() {
             Ok(statements) => {
                 // Assert no input left
                 if self.peek().is_some() {
@@ -90,15 +94,57 @@ impl Parser {
         }
     }
 
-    pub fn parse_statements(&mut self) -> Result<Vec<Statement>, ParseError> {
+    fn parse_declarations(&mut self) -> Result<Vec<Statement>, ParseError> {
         let mut statements = Vec::new();
         while !self.at_end() {
-            statements.push(self.parse_statement()?)
+            statements.push(self.parse_declaration()?)
         }
         Ok(statements)
     }
 
-    pub fn parse_statement(&mut self) -> Result<Statement, ParseError> {
+    fn parse_declaration(&mut self) -> Result<Statement, ParseError> {
+        let tok = self.peek_require()?.clone();
+        match tok.value {
+            TokenValue::Var => self.parse_declaration_inner(&tok),
+            _ => self.parse_statement(),
+        }
+    }
+
+    fn parse_declaration_inner(&mut self, start: &Token) -> Result<Statement, ParseError> {
+        assert_eq!(start.value, TokenValue::Var);
+        self.advance();
+
+        let ident_token = self.peek_require()?.clone();
+        let identifier = match &ident_token.value {
+            TokenValue::Identifier(ident) => {
+                self.advance();
+                ident
+            }
+            _ => {
+                return Err(ParseError::UnexpectedTokenExpected {
+                    got: ident_token.clone(),
+                    want: TokenValue::Identifier("IDENTIFIER".to_string())
+                })
+            }
+        };
+
+        let eq_token = self.peek_require()?;
+        let expr = match eq_token.value {
+            TokenValue::Equal => {
+                self.advance();
+                Some(self.parse_expression()?)
+            }
+            _ => None,
+        };
+
+        self.expect_semicolon()?;
+        Ok(Statement::Declaration {
+            identifier: identifier.to_string(),
+            expr,
+        })
+    }
+
+    fn parse_statement(&mut self) -> Result<Statement, ParseError> {
         let tok = self.peek_require()?;
         let stmt = match tok.value {
             TokenValue::Print => {
@@ -108,11 +154,16 @@ impl Parser {
             _ => Statement::Expression(self.parse_expression()?),
         };
 
+        self.expect_semicolon()?;
+        Ok(stmt)
+    }
+
+    fn expect_semicolon(&mut self) -> Result<(), ParseError> {
         let ending_tok = self.peek_require()?;
         match ending_tok.value {
             TokenValue::Semicolon => {
                 self.advance();
-                Ok(stmt)
+                Ok(())
             }
             _ => Err(ParseError::UnexpectedTokenExpected {
                 got: ending_tok.clone(),
@@ -225,6 +276,10 @@ impl Parser {
             TokenValue::String(string) => {
                 self.advance();
                 Ok(Expression::Literal(Literal::String(string)))
+            }
+            TokenValue::Identifier(ident) => {
+                self.advance();
+                Ok(Expression::Literal(Literal::Identifier(ident)))
             }
             TokenValue::True => {
                 self.advance();
