@@ -1,4 +1,5 @@
 use std::env;
+use std::io;
 
 use lox::eval;
 use lox::lexer;
@@ -31,7 +32,7 @@ fn main() {
             std::process::exit(1);
         }
     };
-    match eval::evaluate_program(program) {
+    match eval::evaluate_program(program, &mut io::stdout()) {
         Ok(()) => {},
         Err(err) => {
             eprintln!("ERROR: {:#?}", err);
