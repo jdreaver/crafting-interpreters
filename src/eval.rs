@@ -38,7 +38,28 @@ pub enum EvalError {
     UnknownIdentifer(String),
 }
 
-type Environment = HashMap<String, ExpressionResult>;
+struct Environment {
+    identifiers: HashMap<String, ExpressionResult>,
+}
+
+impl Environment {
+    fn new() -> Self {
+        Environment {
+            identifiers: HashMap::new(),
+        }
+    }
+
+    fn define(&mut self, identifier: String, value: Option<ExpressionResult>) {
+        self.identifiers.insert(identifier, value.unwrap_or(ExpressionResult::Nil));
+    }
+
+    fn identifier_value(&self, identifier: &String) -> Result<ExpressionResult, EvalError> {
+        match self.identifiers.get(identifier) {
+            Some(val) => Ok(val.clone()),
+            None => Err(EvalError::UnknownIdentifer(identifier.clone())),
+        }
+    }
+}
 
 pub fn evaluate_program<W: Write>(program: Program, out: &mut W) -> Result<(), EvalError> {
     let mut env = Environment::new();
@@ -52,18 +73,15 @@ pub fn evaluate_program<W: Write>(program: Program, out: &mut W) -> Result<(), E
                     .map_err(|err| EvalError::IOError(err.to_string()))?;
             }
             Statement::Declaration{ identifier, expr } => {
-                let result = match expr {
-                    Some(expr) => evaluate_expression(expr, &env)?,
-                    None => ExpressionResult::Nil,
-                };
-                env.insert(identifier, result);
+                let result = expr.map(|expr| evaluate_expression(expr, &env)).transpose()?;
+                env.define(identifier, result);
             },
         }
     }
     Ok(())
 }
 
-pub fn evaluate_expression(expr: Expression, env: &Environment) -> Result<ExpressionResult, EvalError> {
+fn evaluate_expression(expr: Expression, env: &Environment) -> Result<ExpressionResult, EvalError> {
     match expr {
         Expression::Literal(lit) => evaluate_literal(lit, env),
         Expression::Unary { op, expr } => evaluate_unary(op, *expr, env),
@@ -78,10 +96,7 @@ fn evaluate_literal(lit: Literal, env: &Environment) -> Result<ExpressionResult,
         Literal::True => Ok(ExpressionResult::Bool(true)),
         Literal::False => Ok(ExpressionResult::Bool(false)),
         Literal::Nil => Ok(ExpressionResult::Nil),
-        Literal::Identifier(x) => match env.get(x) {
-            Some(val) => Ok(val.clone()),
-            None => Err(EvalError::UnknownIdentifer(x.clone())),
-        },
+        Literal::Identifier(x) => env.identifier_value(x),
     }
 }
 
