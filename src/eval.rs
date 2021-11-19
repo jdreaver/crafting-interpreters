@@ -65,30 +65,26 @@ impl Environment {
         self.current_scope().insert(identifier, value.unwrap_or(ExpressionResult::Nil));
     }
 
-    fn identifier_value(&self, identifier: &String) -> Result<ExpressionResult, EvalError> {
+    fn identifier_value(&self, identifier: &str) -> Result<ExpressionResult, EvalError> {
         // Check scopes starting with innermost scope
         for scope in self.scopes.iter().rev() {
-            match scope.get(identifier) {
-                Some(val) => return Ok(val.clone()),
-                None => {},
+            if let Some(val) = scope.get(identifier) {
+                return Ok(val.clone())
             }
         }
 
-        Err(EvalError::UnknownIdentifer(identifier.clone()))
+        Err(EvalError::UnknownIdentifer(identifier.to_string()))
     }
 
-    fn assign(&mut self, identifier: &String, value: ExpressionResult) -> Result<(), EvalError> {
+    fn assign(&mut self, identifier: &str, value: ExpressionResult) -> Result<(), EvalError> {
         // Check scopes starting with innermost scope
         for scope in self.scopes.iter_mut().rev() {
-            match scope.get(identifier) {
-                Some(_) => {
-                    scope.insert(identifier.clone(), value);
-                    return Ok(())
-                }
-                None => {}
+            if scope.get(identifier).is_some() {
+                scope.insert(identifier.to_string(), value);
+                return Ok(())
             }
         }
-        Err(EvalError::UnknownIdentifer(identifier.clone()))
+        Err(EvalError::UnknownIdentifer(identifier.to_string()))
     }
 }
 

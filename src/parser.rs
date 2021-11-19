@@ -216,7 +216,7 @@ impl Parser {
             Some(tok) => match tok.value {
                 TokenValue::Equal => {
                     let target = match lvalue {
-                        Expression::Literal(Literal::Identifier(ident)) => ident.clone(),
+                        Expression::Literal(Literal::Identifier(ident)) => ident,
                         _ => return Err(ParseError::InvalidAssignmentTarget(lvalue)),
                     };
                     self.advance();
@@ -361,17 +361,16 @@ impl Parser {
         self.advance();
 
         let expr = self.parse_expression()?;
-        match self.peek_require()? {
-            tok => match tok.value.clone() {
-                TokenValue::RightParen => {
-                    self.advance();
-                    Ok(Expression::Parens(Box::new(expr)))
-                }
-                _ => Err(ParseError::UnexpectedTokenExpected {
-                    got: tok.clone(),
-                    want: TokenValue::RightParen,
-                }),
-            },
+        let tok = self.peek_require()?;
+        match tok.value {
+            TokenValue::RightParen => {
+                self.advance();
+                Ok(Expression::Parens(Box::new(expr)))
+            }
+            _ => Err(ParseError::UnexpectedTokenExpected {
+                got: tok.clone(),
+                want: TokenValue::RightParen,
+            }),
         }
     }
 }
