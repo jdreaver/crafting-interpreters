@@ -44,6 +44,10 @@ pub enum Expression {
         op: UnaryOperator,
         expr: Box<Expression>,
     },
+    Call {
+        callee: Box<Expression>,
+        arguments: Vec<Expression>,
+    },
     Literal(Literal),
 }
 
@@ -318,7 +322,9 @@ impl Parser {
     /// term           → factor ( ( "-" | "+" ) factor )* ;
     /// factor         → unary ( ( "/" | "*" ) unary )* ;
     /// unary          → ( "!" | "-" ) unary
-    ///                | primary ;
+    ///                | call ;
+    /// call           → primary ( "(" arguments? ")" )* ;
+    /// arguments      → expression ( "," expression )* ;
     /// primary        → NUMBER | STRING | "true" | "false" | "nil"
     ///                | "(" expression ")" ;
     /// ```
@@ -472,7 +478,7 @@ impl Parser {
         match tok.value {
             TokenValue::Bang => self.parse_unary_inner(UnaryOperator::Not),
             TokenValue::Minus => self.parse_unary_inner(UnaryOperator::Negate),
-            _ => self.parse_primary(),
+            _ => self.parse_call(),
         }
     }
 
@@ -480,6 +486,48 @@ impl Parser {
         self.advance();
         let expr = Box::new(self.parse_unary()?);
         Ok(Expression::Unary { op, expr })
+    }
+
+    fn parse_call(&mut self) -> Result<Expression, ParseError> {
+        let mut expr = self.parse_primary()?;
+
+        // There can be many function calls in a row
+        while let Some(next_tok) = self.peek() {
+            let next_tok = next_tok.clone();
+            match next_tok.value {
+                TokenValue::LeftParen => {
+                    expr = self.finish_call(expr, &next_tok)?;
+                }
+                _ =>{
+                    break
+                }
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee: Expression, start: &Token) -> Result<Expression, ParseError> {
+        assert_eq!(start.value, TokenValue::LeftParen);
+        self.advance();
+
+        let mut args = Vec::new();
+        if self.peek_require("finish_call immediate right paren")?.value != TokenValue::RightParen {
+            loop {
+                args.push(self.parse_expression()?);
+                if self.peek_require("finish_call args comma")?.value == TokenValue::Comma {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+        }
+        self.expect_token("finish_call right paren", TokenValue::RightParen)?;
+
+        Ok(Expression::Call {
+            callee: Box::new(callee),
+            arguments: args,
+        })
     }
 
     fn parse_primary(&mut self) -> Result<Expression, ParseError> {

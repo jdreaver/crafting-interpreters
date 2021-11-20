@@ -167,6 +167,7 @@ fn evaluate_expression(
         Expression::Literal(lit) => evaluate_literal(lit, env),
         Expression::Unary { op, expr } => evaluate_unary(op, expr, env),
         Expression::Infix { op, lhs, rhs } => evaluate_infix(op, lhs, rhs, env),
+        Expression::Call { callee, arguments } => todo!("expression call: {:?} ({:?})", callee, arguments),
     }
 }
 
