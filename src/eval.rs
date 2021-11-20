@@ -210,17 +210,8 @@ fn evaluate_infix(
     rhs: &Expression,
     env: &mut Environment,
 ) -> Result<ExpressionResult, EvalError> {
-    let lhs_result = evaluate_expression(lhs, env)?;
-    let rhs_result = evaluate_expression(rhs, env)?;
-
-    let incorrect_type_error = Err(EvalError::InfixIncorrectTypes {
-        op: op.clone(),
-        lhs: lhs_result.clone(),
-        rhs: rhs_result.clone(),
-    });
-
     match op {
-        InfixOperator::Equals => match (&lhs_result, &rhs_result) {
+        InfixOperator::Equals => match (evaluate_expression(lhs, env)?, evaluate_expression(rhs, env)?) {
             (ExpressionResult::Number(x), ExpressionResult::Number(y)) =>
             {
                 #[allow(clippy::float_cmp)]
@@ -233,9 +224,13 @@ fn evaluate_infix(
                 Ok(ExpressionResult::Bool(x == y))
             }
             (ExpressionResult::Nil, ExpressionResult::Nil) => Ok(ExpressionResult::Bool(true)),
-            _ => incorrect_type_error,
+            (lhs_result, rhs_result) => Err(EvalError::InfixIncorrectTypes {
+                op: op.clone(),
+                lhs: lhs_result,
+                rhs: rhs_result,
+            }),
         },
-        InfixOperator::NotEquals => match (&lhs_result, &rhs_result) {
+        InfixOperator::NotEquals => match (evaluate_expression(lhs, env)?, evaluate_expression(rhs, env)?) {
             (ExpressionResult::Number(x), ExpressionResult::Number(y)) =>
             {
                 #[allow(clippy::float_cmp)]
@@ -248,61 +243,70 @@ fn evaluate_infix(
                 Ok(ExpressionResult::Bool(x != y))
             }
             (ExpressionResult::Nil, ExpressionResult::Nil) => Ok(ExpressionResult::Bool(false)),
-            _ => incorrect_type_error,
+            (lhs_result, rhs_result) => Err(EvalError::InfixIncorrectTypes {
+                op: op.clone(),
+                lhs: lhs_result,
+                rhs: rhs_result,
+            }),
         },
-        InfixOperator::Less => match (&lhs_result, &rhs_result) {
-            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
-                Ok(ExpressionResult::Bool(x < y))
-            }
-            _ => incorrect_type_error,
-        },
-        InfixOperator::LessEqual => match (&lhs_result, &rhs_result) {
-            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
-                Ok(ExpressionResult::Bool(x <= y))
-            }
-            _ => incorrect_type_error,
-        },
-        InfixOperator::Greater => match (&lhs_result, &rhs_result) {
-            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
-                Ok(ExpressionResult::Bool(x > y))
-            }
-            _ => incorrect_type_error,
-        },
-        InfixOperator::GreaterEqual => match (&lhs_result, &rhs_result) {
-            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
-                Ok(ExpressionResult::Bool(x >= y))
-            }
-            _ => incorrect_type_error,
-        },
-        InfixOperator::Plus => match (&lhs_result, &rhs_result) {
+        InfixOperator::Less => evaluate_numeric_infix(op, lhs, rhs, env, |x, y| {
+            ExpressionResult::Bool(x < y)
+        }),
+        InfixOperator::LessEqual => evaluate_numeric_infix(op, lhs, rhs, env, |x, y| {
+            ExpressionResult::Bool(x <= y)
+        }),
+        InfixOperator::Greater => evaluate_numeric_infix(op, lhs, rhs, env, |x, y| {
+            ExpressionResult::Bool(x > y)
+        }),
+        InfixOperator::GreaterEqual => evaluate_numeric_infix(op, lhs, rhs, env, |x, y| {
+            ExpressionResult::Bool(x >= y)
+        }),
+        InfixOperator::Plus => match (evaluate_expression(lhs, env)?, evaluate_expression(rhs, env)?) {
             (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
                 Ok(ExpressionResult::Number(x + y))
             }
             (ExpressionResult::String(x), ExpressionResult::String(y)) => {
-                Ok(ExpressionResult::String(x.clone() + y))
+                Ok(ExpressionResult::String(x + &y.to_string()))
             }
-            _ => incorrect_type_error,
+            (lhs_result, rhs_result) => Err(EvalError::InfixIncorrectTypes {
+                op: op.clone(),
+                lhs: lhs_result,
+                rhs: rhs_result,
+            }),
         },
-        InfixOperator::Minus => match (&lhs_result, &rhs_result) {
-            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
-                Ok(ExpressionResult::Number(x - y))
-            }
-            _ => incorrect_type_error,
-        },
-        InfixOperator::Times => match (&lhs_result, &rhs_result) {
-            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
-                Ok(ExpressionResult::Number(x * y))
-            }
-            _ => incorrect_type_error,
-        },
-        InfixOperator::Divide => match (&lhs_result, &rhs_result) {
-            (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
-                Ok(ExpressionResult::Number(x / y))
-            }
-            _ => incorrect_type_error,
-        },
+        InfixOperator::Minus => evaluate_numeric_infix(op, lhs, rhs, env, |x, y| {
+            ExpressionResult::Number(x - y)
+        }),
+        InfixOperator::Times => evaluate_numeric_infix(op, lhs, rhs, env, |x, y| {
+            ExpressionResult::Number(x * y)
+        }),
+        InfixOperator::Divide => evaluate_numeric_infix(op, lhs, rhs, env, |x, y| {
+            ExpressionResult::Number(x / y)
+        }),
         InfixOperator::Or => todo!(),
         InfixOperator::And => todo!(),
+    }
+}
+
+fn evaluate_numeric_infix(
+    op: &InfixOperator,
+    lhs: &Expression,
+    rhs: &Expression,
+    env: &mut Environment,
+    f: fn (f64, f64) -> ExpressionResult
+) -> Result<ExpressionResult, EvalError> {
+    let lhs_result = evaluate_expression(lhs, env)?;
+    let rhs_result = evaluate_expression(rhs, env)?;
+
+    match (&lhs_result, &rhs_result) {
+        (ExpressionResult::Number(x), ExpressionResult::Number(y)) => {
+            Ok(f(*x, *y))
+        }
+        _ => Err(EvalError::InfixIncorrectTypes {
+            op: op.clone(),
+            lhs: lhs_result.clone(),
+            rhs: rhs_result.clone(),
+        }),
     }
 }
 
