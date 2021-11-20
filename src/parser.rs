@@ -83,7 +83,7 @@ pub enum Literal {
 pub enum ParseError {
     UnexpectedToken(Token),
     UnexpectedTokenExpected { got: Token, want: TokenValue },
-    OutOfInput,
+    OutOfInput(String),
     ExtraInput(Vec<Token>),
     InvalidAssignmentTarget(Expression),
 }
@@ -113,7 +113,7 @@ impl Parser {
     }
 
     fn parse_declaration(&mut self) -> Result<Statement, ParseError> {
-        let tok = self.peek_require()?.clone();
+        let tok = self.peek_require("parse_declaration")?.clone();
         match tok.value {
             TokenValue::Var => self.parse_declaration_inner(&tok),
             _ => self.parse_statement(),
@@ -124,7 +124,7 @@ impl Parser {
         assert_eq!(start.value, TokenValue::Var);
         self.advance();
 
-        let ident_token = self.peek_require()?.clone();
+        let ident_token = self.peek_require("parse_declaration_inner identifier")?.clone();
         let identifier = match &ident_token.value {
             TokenValue::Identifier(ident) => {
                 self.advance();
@@ -138,7 +138,7 @@ impl Parser {
             }
         };
 
-        let eq_token = self.peek_require()?;
+        let eq_token = self.peek_require("parse_declaration_inner equal")?;
         let expr = match eq_token.value {
             TokenValue::Equal => {
                 self.advance();
@@ -147,7 +147,7 @@ impl Parser {
             _ => None,
         };
 
-        self.expect_token(TokenValue::Semicolon)?;
+        self.expect_token("parse_declaration_inner", TokenValue::Semicolon)?;
         Ok(Statement::Declaration {
             identifier: identifier.to_string(),
             expr,
@@ -155,12 +155,12 @@ impl Parser {
     }
 
     fn parse_statement(&mut self) -> Result<Statement, ParseError> {
-        let tok = self.peek_require()?.clone();
+        let tok = self.peek_require("parse statement")?.clone();
         match tok.value {
             TokenValue::Print => {
                 self.advance();
                 let expr = self.parse_expression()?;
-                self.expect_token(TokenValue::Semicolon)?;
+                self.expect_token("parse_statement print", TokenValue::Semicolon)?;
                 Ok(Statement::Print(expr))
             }
             TokenValue::If => self.parse_if(&tok),
@@ -173,7 +173,7 @@ impl Parser {
 
     fn parse_expression_statement(&mut self) -> Result<Statement, ParseError> {
         let expr = self.parse_expression()?;
-        self.expect_token(TokenValue::Semicolon)?;
+        self.expect_token("parse_expression_statement", TokenValue::Semicolon)?;
         Ok(Statement::Expression(expr))
     }
 
@@ -181,9 +181,9 @@ impl Parser {
         assert_eq!(start.value, TokenValue::If);
         self.advance();
 
-        self.expect_token(TokenValue::LeftParen)?;
+        self.expect_token("parse_if left paren", TokenValue::LeftParen)?;
         let condition = self.parse_expression()?;
-        self.expect_token(TokenValue::RightParen)?;
+        self.expect_token("parse_if right paren", TokenValue::RightParen)?;
 
         let then_branch = Box::new(self.parse_statement()?);
         let else_branch = if self.peek().map(|t| t.value.clone()) == Some(TokenValue::Else) {
@@ -204,9 +204,9 @@ impl Parser {
         assert_eq!(start.value, TokenValue::While);
         self.advance();
 
-        self.expect_token(TokenValue::LeftParen)?;
+        self.expect_token("parse_while left paren", TokenValue::LeftParen)?;
         let condition = self.parse_expression()?;
-        self.expect_token(TokenValue::RightParen)?;
+        self.expect_token("parse_while right paren", TokenValue::RightParen)?;
 
         let body = Box::new(self.parse_statement()?);
 
@@ -218,9 +218,9 @@ impl Parser {
         assert_eq!(start.value, TokenValue::For);
         self.advance();
 
-        self.expect_token(TokenValue::LeftParen)?;
+        self.expect_token("parse_for left paren", TokenValue::LeftParen)?;
 
-        let initializer: Option<Statement> = match self.peek_require()?.value {
+        let initializer: Option<Statement> = match self.peek_require("parse_for initializer")?.value {
             TokenValue::Semicolon => {
                 self.advance();
                 None
@@ -229,24 +229,24 @@ impl Parser {
             _ => Some(self.parse_expression_statement()?),
         };
 
-        let condition: Option<Expression> = match self.peek_require()?.value {
+        let condition: Option<Expression> = match self.peek_require("parse_for condition")?.value {
             TokenValue::Semicolon => {
                 self.advance();
                 None
             },
             _ => {
                 let expr = self.parse_expression()?;
-                self.expect_token(TokenValue::Semicolon)?;
+                self.expect_token("parse_for condition semicolon", TokenValue::Semicolon)?;
                 Some(expr)
             },
         };
 
-        let increment: Option<Statement> = match self.peek_require()?.value {
+        let increment: Option<Statement> = match self.peek_require("parse_for increment")?.value {
             TokenValue::RightParen => None,
             _ => Some(Statement::Expression(self.parse_expression()?)),
         };
 
-        self.expect_token(TokenValue::RightParen)?;
+        self.expect_token("parse_for right paren", TokenValue::RightParen)?;
 
         let mut body = self.parse_statement()?;
 
@@ -282,18 +282,18 @@ impl Parser {
         self.advance();
 
         let mut statements = Vec::new();
-        while self.peek_require()?.value != TokenValue::RightBrace {
+        while self.peek_require("parse_block statements")?.value != TokenValue::RightBrace {
             statements.push(self.parse_declaration()?);
         }
 
-        assert_eq!(self.peek_require()?.value, TokenValue::RightBrace);
+        assert_eq!(self.peek_require("parse_block right brace")?.value, TokenValue::RightBrace);
         self.advance();
 
         Ok(Statement::Block(statements))
     }
 
-    fn expect_token(&mut self, token_value: TokenValue) -> Result<(), ParseError> {
-        let ending_tok = self.peek_require()?;
+    fn expect_token<S: Into<String>>(&mut self, context: S, token_value: TokenValue) -> Result<(), ParseError> {
+        let ending_tok = self.peek_require(format!("({}) expect_token {:?}", context.into(), token_value))?;
         if ending_tok.value == token_value {
             self.advance();
             Ok(())
@@ -468,7 +468,7 @@ impl Parser {
     }
 
     fn parse_unary(&mut self) -> Result<Expression, ParseError> {
-        let tok = self.peek_require()?;
+        let tok = self.peek_require("parse_unary")?;
         match tok.value {
             TokenValue::Bang => self.parse_unary_inner(UnaryOperator::Not),
             TokenValue::Minus => self.parse_unary_inner(UnaryOperator::Negate),
@@ -483,7 +483,7 @@ impl Parser {
     }
 
     fn parse_primary(&mut self) -> Result<Expression, ParseError> {
-        let tok = self.peek_require()?.clone(); // TODO Try to remove clone() here
+        let tok = self.peek_require("parse_primary")?.clone(); // TODO Try to remove clone() here
         match tok.value {
             TokenValue::Number(num) => {
                 self.advance();
@@ -520,8 +520,8 @@ impl Parser {
     }
 
     /// Like peek(), but returns an error if we reach end of input
-    fn peek_require(&self) -> Result<&Token, ParseError> {
-        self.peek().ok_or(ParseError::OutOfInput)
+    fn peek_require<S: Into<String>>(&self, description: S) -> Result<&Token, ParseError> {
+        self.peek().ok_or(ParseError::OutOfInput(description.into()))
     }
 
     fn at_end(&self) -> bool {
@@ -537,7 +537,7 @@ impl Parser {
         self.advance();
 
         let expr = self.parse_expression()?;
-        self.expect_token(TokenValue::RightParen)?;
+        self.expect_token("parenthesized_expression", TokenValue::RightParen)?;
         Ok(Expression::Parens(Box::new(expr)))
     }
 }
