@@ -117,16 +117,15 @@ impl Parser {
     }
 
     fn parse_declaration(&mut self) -> Result<Statement, ParseError> {
-        let tok = self.peek_require("parse_declaration")?.clone();
+        let tok = self.peek_require("parse_declaration")?;
         match tok.value {
-            TokenValue::Var => self.parse_declaration_inner(&tok),
+            TokenValue::Var => self.parse_declaration_inner(),
             _ => self.parse_statement(),
         }
     }
 
-    fn parse_declaration_inner(&mut self, start: &Token) -> Result<Statement, ParseError> {
-        assert_eq!(start.value, TokenValue::Var);
-        self.advance();
+    fn parse_declaration_inner(&mut self) -> Result<Statement, ParseError> {
+        self.expect_token("parse_declaration_inner var", TokenValue::Var)?;
 
         let ident_token = self.peek_require("parse_declaration_inner identifier")?.clone();
         let identifier = match &ident_token.value {
@@ -167,10 +166,10 @@ impl Parser {
                 self.expect_token("parse_statement print", TokenValue::Semicolon)?;
                 Ok(Statement::Print(expr))
             }
-            TokenValue::If => self.parse_if(&tok),
-            TokenValue::While => self.parse_while(&tok),
-            TokenValue::For => self.parse_for(&tok),
-            TokenValue::LeftBrace => self.parse_block(&tok),
+            TokenValue::If => self.parse_if(),
+            TokenValue::While => self.parse_while(),
+            TokenValue::For => self.parse_for(),
+            TokenValue::LeftBrace => self.parse_block(),
             _ => self.parse_expression_statement(),
         }
     }
@@ -181,9 +180,8 @@ impl Parser {
         Ok(Statement::Expression(expr))
     }
 
-    fn parse_if(&mut self, start: &Token) -> Result<Statement, ParseError> {
-        assert_eq!(start.value, TokenValue::If);
-        self.advance();
+    fn parse_if(&mut self) -> Result<Statement, ParseError> {
+        self.expect_token("parse_if if", TokenValue::If)?;
 
         self.expect_token("parse_if left paren", TokenValue::LeftParen)?;
         let condition = self.parse_expression()?;
@@ -204,9 +202,8 @@ impl Parser {
         })
     }
 
-    fn parse_while(&mut self, start: &Token) -> Result<Statement, ParseError> {
-        assert_eq!(start.value, TokenValue::While);
-        self.advance();
+    fn parse_while(&mut self) -> Result<Statement, ParseError> {
+        self.expect_token("parse_while while", TokenValue::While)?;
 
         self.expect_token("parse_while left paren", TokenValue::LeftParen)?;
         let condition = self.parse_expression()?;
@@ -218,9 +215,8 @@ impl Parser {
     }
 
     // For is just syntactic sugar for a while loop
-    fn parse_for(&mut self, start: &Token) -> Result<Statement, ParseError> {
-        assert_eq!(start.value, TokenValue::For);
-        self.advance();
+    fn parse_for(&mut self) -> Result<Statement, ParseError> {
+        self.expect_token("parse_for for", TokenValue::For)?;
 
         self.expect_token("parse_for left paren", TokenValue::LeftParen)?;
 
@@ -281,9 +277,8 @@ impl Parser {
         }
     }
 
-    fn parse_block(&mut self, start: &Token) -> Result<Statement, ParseError> {
-        assert_eq!(start.value, TokenValue::LeftBrace);
-        self.advance();
+    fn parse_block(&mut self) -> Result<Statement, ParseError> {
+        self.expect_token("parse_block left brace", TokenValue::LeftBrace)?;
 
         let mut statements = Vec::new();
         while self.peek_require("parse_block statements")?.value != TokenValue::RightBrace {
@@ -493,10 +488,9 @@ impl Parser {
 
         // There can be many function calls in a row
         while let Some(next_tok) = self.peek() {
-            let next_tok = next_tok.clone();
             match next_tok.value {
                 TokenValue::LeftParen => {
-                    expr = self.finish_call(expr, &next_tok)?;
+                    expr = self.finish_call(expr)?;
                 }
                 _ =>{
                     break
@@ -507,9 +501,8 @@ impl Parser {
         Ok(expr)
     }
 
-    fn finish_call(&mut self, callee: Expression, start: &Token) -> Result<Expression, ParseError> {
-        assert_eq!(start.value, TokenValue::LeftParen);
-        self.advance();
+    fn finish_call(&mut self, callee: Expression) -> Result<Expression, ParseError> {
+        self.expect_token("finish_call left paren", TokenValue::LeftParen)?;
 
         let mut args = Vec::new();
         if self.peek_require("finish_call immediate right paren")?.value != TokenValue::RightParen {
@@ -557,7 +550,7 @@ impl Parser {
                 self.advance();
                 Ok(Expression::Literal(Literal::Nil))
             }
-            TokenValue::LeftParen => self.parenthesized_expression(&tok),
+            TokenValue::LeftParen => self.parenthesized_expression(),
             _ => Err(ParseError::UnexpectedToken(tok)),
         }
     }
@@ -580,10 +573,8 @@ impl Parser {
         self.index += 1;
     }
 
-    fn parenthesized_expression(&mut self, start: &Token) -> Result<Expression, ParseError> {
-        assert_eq!(start.value, TokenValue::LeftParen);
-        self.advance();
-
+    fn parenthesized_expression(&mut self) -> Result<Expression, ParseError> {
+        self.expect_token("parenthesized_expression", TokenValue::LeftParen)?;
         let expr = self.parse_expression()?;
         self.expect_token("parenthesized_expression", TokenValue::RightParen)?;
         Ok(Expression::Parens(Box::new(expr)))
