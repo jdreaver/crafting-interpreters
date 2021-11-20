@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::io::Write;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::parser::{Expression, InfixOperator, Literal, Program, Statement, UnaryOperator};
 
@@ -9,7 +10,17 @@ pub enum Value {
     Number(f64),
     String(String),
     Bool(bool),
+    Function {
+        name: String,
+        arity: usize,
+        body: FunctionBody,
+    },
     Nil,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum FunctionBody {
+    PrimitiveFunction(fn (Vec<Value>) -> Result<Value, EvalError>),
 }
 
 impl fmt::Display for Value {
@@ -18,6 +29,7 @@ impl fmt::Display for Value {
             Value::Number(x) => write!(f, "{}", x),
             Value::String(x) => write!(f, "\"{}\"", x),
             Value::Bool(x) => write!(f, "{}", x),
+            Value::Function{ name, .. } => write!(f, "<fn {}>", name),
             Value::Nil => write!(f, "nil"),
         }
     }
@@ -44,6 +56,12 @@ pub enum EvalError {
         rhs: Value,
     },
     UnknownIdentifer(String),
+    ExpectedFunctionGot(Value),
+    IncorrectArity {
+        name: String,
+        arity: usize,
+        got: usize,
+    }
 }
 
 struct Environment {
@@ -103,7 +121,21 @@ impl Environment {
 
 pub fn evaluate_program<W: Write>(program: Program, out: &mut W) -> Result<(), EvalError> {
     let mut env = Environment::new();
+    env.define("clock".to_string(), Some(
+        Value::Function {
+            name: "clock".to_string(),
+            arity: 0,
+            body: FunctionBody::PrimitiveFunction(clock_primitive),
+        }),
+    );
     evaluate_statements(&program.statements, out, &mut env)
+}
+
+fn clock_primitive(_: Vec<Value>) -> Result<Value, EvalError> {
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(duration) => Ok(Value::Number(duration.as_secs() as f64)),
+        Err(err) => Err(EvalError::IOError(err.to_string())),
+    }
 }
 
 fn evaluate_statements<W: Write>(
@@ -175,7 +207,7 @@ fn evaluate_expression(
         Expression::Literal(lit) => evaluate_literal(lit, env),
         Expression::Unary { op, expr } => evaluate_unary(op, expr, env),
         Expression::Infix { op, lhs, rhs } => evaluate_infix(op, lhs, rhs, env),
-        Expression::Call { callee, arguments } => todo!("expression call: {:?} ({:?})", callee, arguments),
+        Expression::Call { callee, arguments } => evaluate_function(callee, arguments, env),
     }
 }
 
@@ -332,6 +364,33 @@ fn evaluate_numeric_infix(
     }
 }
 
+fn evaluate_function(
+    callee: &Expression,
+    args: &Vec<Expression>,
+    env: &mut Environment,
+) -> Result<Value, EvalError> {
+    let callee_val = evaluate_expression(callee, env)?;
+    match callee_val {
+        Value::Function { name, arity, body } => {
+            if args.len() != arity {
+                return Err(EvalError::IncorrectArity {
+                    name,
+                    arity,
+                    got: args.len(),
+                });
+            }
+            let arg_vals = args
+                .iter()
+                .map(|arg| evaluate_expression(arg, env))
+                .collect::<Result<Vec<_>, _>>()?;
+            match body {
+                FunctionBody::PrimitiveFunction(f) => f(arg_vals),
+            }
+        },
+        _ => Err(EvalError::ExpectedFunctionGot(callee_val)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -340,13 +399,13 @@ mod tests {
 
     #[test]
     fn test_evaluate_program() {
-        fn assert_success_output(input: &str, expected_output: &str) {
+        fn assert_success_output<S: Into<String>>(input: &str, expected_output: S) {
             let mut lexer = Lexer::new(input);
             lexer.lex().expect("lexing failed");
             let program = Parser::new(lexer.tokens).parse().expect("parse error");
             let mut buf = Vec::new();
             assert_eq!(evaluate_program(program, &mut buf), Ok(()));
-            assert_eq!(String::from_utf8(buf), Ok(expected_output.to_string()));
+            assert_eq!(String::from_utf8(buf), Ok(expected_output.into()));
         }
 
         assert_success_output(
@@ -480,7 +539,17 @@ mod tests {
                 i = i + 1;
               }
             "#,
-            "0\n1\n2\n"
+            "0\n1\n2\n",
+        );
+
+        // N.B. This has a race condition. We should mock time in the
+        // interpreter.
+        assert_success_output(
+            r#"
+              var x = clock;
+              print x();
+            "#,
+            format!("{}\n", SystemTime::now().duration_since(UNIX_EPOCH).expect("duration_since").as_secs()),
         );
 
         fn assert_failure_output(input: &str, expected: EvalError) {
