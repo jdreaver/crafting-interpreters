@@ -136,6 +136,7 @@ fn evaluate_statement<W: Write>(
                 _ => {},
             }
         }
+        Statement::While{ .. } => todo!(),
         Statement::Block(stmts) => {
             env.add_scope();
             let ret = evaluate_statements(stmts, out, env);

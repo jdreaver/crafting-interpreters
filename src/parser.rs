@@ -21,6 +21,10 @@ pub enum Statement {
         then_branch: Box<Statement>,
         else_branch: Box<Option<Statement>>,
     },
+    While {
+        condition: Expression,
+        body: Box<Statement>,
+    },
     Block(Vec<Statement>),
 }
 
@@ -160,6 +164,7 @@ impl Parser {
                 Ok(Statement::Print(expr))
             }
             TokenValue::If => self.parse_if(&tok),
+            TokenValue::While => self.parse_while(&tok),
             TokenValue::LeftBrace => self.parse_block(&tok),
             _ => {
                 let expr = self.parse_expression()?;
@@ -190,6 +195,19 @@ impl Parser {
             then_branch,
             else_branch: Box::new(else_branch),
         })
+    }
+
+    fn parse_while(&mut self, start: &Token) -> Result<Statement, ParseError> {
+        assert_eq!(start.value, TokenValue::While);
+        self.advance();
+
+        self.expect_token(TokenValue::LeftParen)?;
+        let condition = self.parse_expression()?;
+        self.expect_token(TokenValue::RightParen)?;
+
+        let body = Box::new(self.parse_statement()?);
+
+        Ok(Statement::While { condition, body })
     }
 
     fn parse_block(&mut self, start: &Token) -> Result<Statement, ParseError> {
