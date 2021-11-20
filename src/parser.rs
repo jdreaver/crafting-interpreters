@@ -215,7 +215,7 @@ impl Parser {
         } else {
             Err(ParseError::UnexpectedTokenExpected {
                 got: ending_tok.clone(),
-                want: TokenValue::Semicolon,
+                want: token_value,
             })
         }
     }
