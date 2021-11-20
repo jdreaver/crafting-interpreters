@@ -32,7 +32,10 @@ fn main() {
             std::process::exit(1);
         }
     };
-    match eval::evaluate_program(program, &mut io::stdout()) {
+
+    let mut stdout = io::stdout();
+    let mut interpreter = eval::Interpreter::new(&mut stdout);
+    match interpreter.evaluate_program(program) {
         Ok(()) => {}
         Err(err) => {
             eprintln!("ERROR: {:#?}", err);
