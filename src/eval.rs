@@ -200,7 +200,7 @@ fn result_truthiness(result: &ExpressionResult) -> bool {
     match result {
         ExpressionResult::Nil => false,
         ExpressionResult::Bool(x) => x.clone(),
-        _ => false,
+        _ => true,
     }
 }
 
@@ -283,8 +283,22 @@ fn evaluate_infix(
         InfixOperator::Divide => evaluate_numeric_infix(op, lhs, rhs, env, |x, y| {
             ExpressionResult::Number(x / y)
         }),
-        InfixOperator::Or => todo!(),
-        InfixOperator::And => todo!(),
+        InfixOperator::Or => {
+            let lhs_result = evaluate_expression(lhs, env)?;
+            if result_truthiness(&lhs_result) {
+                Ok(lhs_result)
+            } else {
+                evaluate_expression(rhs, env)
+            }
+        }
+        InfixOperator::And => {
+            let lhs_result = evaluate_expression(lhs, env)?;
+            if !result_truthiness(&lhs_result) {
+                Ok(lhs_result)
+            } else {
+                evaluate_expression(rhs, env)
+            }
+        }
     }
 }
 
@@ -420,6 +434,22 @@ mod tests {
             "#,
             "2\n2\n1\n2\n",
         );
+
+        // Logical operators: or
+        assert_success_output("print nil or 1;", "1\n");
+        assert_success_output("print 2 or 3;", "2\n");
+
+        // Logical operators: or short circuits
+        assert_success_output("var x = 10; true or (x = 20); print x;", "10\n");
+        assert_success_output("var x = 10; false or (x = 20); print x;", "20\n");
+
+        // Logical operators: and
+        assert_success_output("print 1 and 2;", "2\n");
+        assert_success_output("print false and 2;", "false\n");
+
+        // Logical operators: and short circuits
+        assert_success_output("var x = 10; false and (x = 20); print x;", "10\n");
+        assert_success_output("var x = 10; true and (x = 20); print x;", "20\n");
 
         fn assert_failure_output(input: &str, expected: EvalError) {
             let mut lexer = Lexer::new(input);
