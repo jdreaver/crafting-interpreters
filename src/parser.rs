@@ -165,13 +165,16 @@ impl Parser {
             }
             TokenValue::If => self.parse_if(&tok),
             TokenValue::While => self.parse_while(&tok),
+            TokenValue::For => self.parse_for(&tok),
             TokenValue::LeftBrace => self.parse_block(&tok),
-            _ => {
-                let expr = self.parse_expression()?;
-                self.expect_token(TokenValue::Semicolon)?;
-                Ok(Statement::Expression(expr))
-            }
+            _ => self.parse_expression_statement(),
         }
+    }
+
+    fn parse_expression_statement(&mut self) -> Result<Statement, ParseError> {
+        let expr = self.parse_expression()?;
+        self.expect_token(TokenValue::Semicolon)?;
+        Ok(Statement::Expression(expr))
     }
 
     fn parse_if(&mut self, start: &Token) -> Result<Statement, ParseError> {
@@ -208,6 +211,70 @@ impl Parser {
         let body = Box::new(self.parse_statement()?);
 
         Ok(Statement::While { condition, body })
+    }
+
+    // For is just syntactic sugar for a while loop
+    fn parse_for(&mut self, start: &Token) -> Result<Statement, ParseError> {
+        assert_eq!(start.value, TokenValue::For);
+        self.advance();
+
+        self.expect_token(TokenValue::LeftParen)?;
+
+        let initializer: Option<Statement> = match self.peek_require()?.value {
+            TokenValue::Semicolon => {
+                self.advance();
+                None
+            },
+            TokenValue::Var => Some(self.parse_declaration()?),
+            _ => Some(self.parse_expression_statement()?),
+        };
+
+        let condition: Option<Expression> = match self.peek_require()?.value {
+            TokenValue::Semicolon => {
+                self.advance();
+                None
+            },
+            _ => {
+                let expr = self.parse_expression()?;
+                self.expect_token(TokenValue::Semicolon)?;
+                Some(expr)
+            },
+        };
+
+        let increment: Option<Statement> = match self.peek_require()?.value {
+            TokenValue::RightParen => None,
+            _ => Some(Statement::Expression(self.parse_expression()?)),
+        };
+
+        self.expect_token(TokenValue::RightParen)?;
+
+        let mut body = self.parse_statement()?;
+
+        // Desugar for(init; condition; increment) body to
+        // {
+        //   init
+        //   while (condition) {
+        //     body
+        //     increment
+        //   }
+        // }
+        match increment {
+            None => {},
+            Some(inc) => {
+                body = Statement::Block(vec![body, inc]);
+            }
+        }
+
+        let while_condition = condition.unwrap_or(Expression::Literal(Literal::True));
+        let while_stmt = Statement::While {
+            condition: while_condition,
+            body: Box::new(body),
+        };
+
+        match initializer {
+            Some(init) => Ok(Statement::Block(vec![init, while_stmt])),
+            None => Ok(while_stmt),
+        }
     }
 
     fn parse_block(&mut self, start: &Token) -> Result<Statement, ParseError> {

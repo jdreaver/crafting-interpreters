@@ -469,6 +469,19 @@ mod tests {
             "3\n2\n1\n",
         );
 
+        // For loop
+        assert_success_output("for (var i = 0; i < 3; i = i + 1) print i;", "0\n1\n2\n");
+        assert_success_output(
+            r#"
+              var i = 0;
+              for (; i < 3;) {
+                print i;
+                i = i + 1;
+              }
+            "#,
+            "0\n1\n2\n"
+        );
+
         fn assert_failure_output(input: &str, expected: EvalError) {
             let mut lexer = Lexer::new(input);
             lexer.lex().expect("lexing failed");
