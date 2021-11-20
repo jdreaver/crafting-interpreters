@@ -138,7 +138,11 @@ fn evaluate_statement<W: Write>(
                 _ => {},
             }
         }
-        Statement::While{ .. } => todo!(),
+        Statement::While { condition, body } => {
+            while result_truthiness(&evaluate_expression(&condition, env)?) {
+                evaluate_statement(body, out, env)?;
+            }
+        }
         Statement::Block(stmts) => {
             env.add_scope();
             let ret = evaluate_statements(stmts, out, env);
@@ -453,6 +457,17 @@ mod tests {
         // Logical operators: and short circuits
         assert_success_output("var x = 10; false and (x = 20); print x;", "10\n");
         assert_success_output("var x = 10; true and (x = 20); print x;", "20\n");
+
+        assert_success_output(
+            r#"
+              var x = 3;
+              while (x > 0) {
+                print x;
+                x = x - 1;
+              }
+            "#,
+            "3\n2\n1\n",
+        );
 
         fn assert_failure_output(input: &str, expected: EvalError) {
             let mut lexer = Lexer::new(input);
