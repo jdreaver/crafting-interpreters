@@ -19,7 +19,7 @@ pub enum Statement {
     If {
         condition: Expression,
         then_branch: Box<Statement>,
-        else_branch: Box<Option<Statement>>,
+        else_branch: Option<Box<Statement>>,
     },
     While {
         condition: Expression,
@@ -185,7 +185,7 @@ impl Parser {
         let then_branch = Box::new(self.parse_statement()?);
         let else_branch = if self.peek().map(|t| t.value.clone()) == Some(TokenValue::Else) {
             self.advance();
-            Some(self.parse_statement()?)
+            Some(Box::new(self.parse_statement()?))
         } else {
             None
         };
@@ -193,7 +193,7 @@ impl Parser {
         Ok(Statement::If {
             condition,
             then_branch,
-            else_branch: Box::new(else_branch),
+            else_branch,
         })
     }
 

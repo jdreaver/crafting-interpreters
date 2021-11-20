@@ -95,22 +95,22 @@ impl Environment {
 
 pub fn evaluate_program<W: Write>(program: Program, out: &mut W) -> Result<(), EvalError> {
     let mut env = Environment::new();
-    evaluate_statements(program.statements, out, &mut env)
+    evaluate_statements(&program.statements, out, &mut env)
 }
 
 fn evaluate_statements<W: Write>(
-    statements: Vec<Statement>,
+    statements: &Vec<Statement>,
     out: &mut W,
     env: &mut Environment,
 ) -> Result<(), EvalError> {
-    for statement in statements {
+    for statement in statements.iter() {
         evaluate_statement(statement, out, env)?;
     }
     Ok(())
 }
 
 fn evaluate_statement<W: Write>(
-    statement: Statement,
+    statement: &Statement,
     out: &mut W,
     env: &mut Environment,
 ) -> Result<(), EvalError> {
@@ -124,15 +124,17 @@ fn evaluate_statement<W: Write>(
         }
         Statement::Declaration { identifier, expr } => {
             let result = expr
+                .as_ref()
                 .map(|expr| evaluate_expression(&expr, env))
                 .transpose()?;
-            env.define(identifier, result);
+            env.define(identifier.to_string(), result);
         }
         Statement::If { condition, then_branch, else_branch } => {
             let condition_result = evaluate_expression(&condition, env)?;
-            match (result_truthiness(&condition_result), *else_branch) {
-                (true, _) => evaluate_statement(*then_branch, out, env)?,
-                (false, Some(else_branch)) => evaluate_statement(else_branch, out, env)?,
+            let result = result_truthiness(&condition_result);
+            match (result, else_branch) {
+                (true, _) => evaluate_statement(&then_branch, out, env)?,
+                (false, Some(else_branch)) => evaluate_statement(&else_branch, out, env)?,
                 _ => {},
             }
         }
