@@ -42,7 +42,7 @@ impl fmt::Display for Value {
 fn value_truthiness(val: &Value) -> bool {
     match val {
         Value::Nil => false,
-        Value::Bool(x) => x.clone(),
+        Value::Bool(x) => *x,
         _ => true,
     }
 }
@@ -145,7 +145,7 @@ impl <'a, W: Write> Interpreter<'a, W> {
         self.evaluate_statements(&program.statements)
     }
 
-    fn evaluate_statements(&mut self, statements: &Vec<Statement>) -> Result<(), EvalError> {
+    fn evaluate_statements(&mut self, statements: &[Statement]) -> Result<(), EvalError> {
         for statement in statements.iter() {
             self.evaluate_statement(statement)?;
         }
@@ -155,31 +155,31 @@ impl <'a, W: Write> Interpreter<'a, W> {
     fn evaluate_statement(&mut self, statement: &Statement) -> Result<(), EvalError> {
         match statement {
             Statement::Expression(expr) => {
-                self.evaluate_expression(&expr)?;
+                self.evaluate_expression(expr)?;
             }
             Statement::Print(expr) => {
-                let expr = self.evaluate_expression(&expr)?;
+                let expr = self.evaluate_expression(expr)?;
                 writeln!(self.out, "{}", expr)
                     .map_err(|err| EvalError::IOError(err.to_string()))?;
             }
             Statement::Declaration { identifier, expr } => {
                 let val = expr
                     .as_ref()
-                    .map(|expr| self.evaluate_expression(&expr))
+                    .map(|expr| self.evaluate_expression(expr))
                     .transpose()?;
                 self.env.define(identifier.to_string(), val);
             }
             Statement::If { condition, then_branch, else_branch } => {
-                let condition_val = self.evaluate_expression(&condition)?;
+                let condition_val = self.evaluate_expression(condition)?;
                 let val = value_truthiness(&condition_val);
                 match (val, else_branch) {
-                    (true, _) => self.evaluate_statement(&then_branch)?,
-                    (false, Some(else_branch)) => self.evaluate_statement(&else_branch)?,
+                    (true, _) => self.evaluate_statement(then_branch)?,
+                    (false, Some(else_branch)) => self.evaluate_statement(else_branch)?,
                     _ => {},
                 }
             }
             Statement::While { condition, body } => {
-                while value_truthiness(&self.evaluate_expression(&condition)?) {
+                while value_truthiness(&self.evaluate_expression(condition)?) {
                     self.evaluate_statement(body)?;
                 }
             }
@@ -206,7 +206,7 @@ impl <'a, W: Write> Interpreter<'a, W> {
             Expression::Parens(expr) => self.evaluate_expression(expr),
             Expression::Assignment { target, expr } => {
                 let val = self.evaluate_expression(expr)?;
-                self.env.assign(&target, val.clone())?;
+                self.env.assign(target, val.clone())?;
                 Ok(val)
             }
             Expression::Literal(lit) => self.evaluate_literal(lit),
@@ -302,7 +302,7 @@ impl <'a, W: Write> Interpreter<'a, W> {
                     Ok(Value::Number(x + y))
                 }
                 (Value::String(x), Value::String(y)) => {
-                    Ok(Value::String(x + &y.to_string()))
+                    Ok(Value::String(x + &y))
                 }
                 (lhs_val, rhs_val) => Err(EvalError::InfixIncorrectTypes {
                     op: op.clone(),
@@ -360,7 +360,7 @@ impl <'a, W: Write> Interpreter<'a, W> {
         }
     }
 
-    fn evaluate_function(&mut self, callee: &Expression, args: &Vec<Expression>) -> Result<Value, EvalError> {
+    fn evaluate_function(&mut self, callee: &Expression, args: &[Expression]) -> Result<Value, EvalError> {
         let callee_val = self.evaluate_expression(callee)?;
         match callee_val {
             Value::Function { name, arity, body } => {

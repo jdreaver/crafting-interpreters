@@ -133,7 +133,7 @@ impl Parser {
     fn parse_var_declaration(&mut self) -> Result<Statement, ParseError> {
         self.expect_token("parse_var_declaration var", TokenValue::Var)?;
 
-        let ident = self.expect_identifier("parse_var_declaration")?;
+        let identifier = self.expect_identifier("parse_var_declaration")?;
 
         let eq_token = self.peek_require("parse_var_declaration equal")?;
         let expr = match eq_token.value {
@@ -145,10 +145,7 @@ impl Parser {
         };
 
         self.expect_token("parse_var_declaration", TokenValue::Semicolon)?;
-        Ok(Statement::Declaration {
-            identifier: ident.to_string(),
-            expr,
-        })
+        Ok(Statement::Declaration { identifier, expr })
     }
 
     fn parse_function_declaration(&mut self) -> Result<Statement, ParseError> {
@@ -335,7 +332,7 @@ impl Parser {
                 Ok(ident)
             }
             _ => {
-                return Err(ParseError::UnexpectedTokenExpected {
+               Err(ParseError::UnexpectedTokenExpected {
                     got: tok.clone(),
                     want: TokenValue::Identifier("IDENTIFIER".to_string()),
                 })
@@ -601,7 +598,7 @@ impl Parser {
 
     /// Like peek(), but returns an error if we reach end of input
     fn peek_require<S: Into<String>>(&self, description: S) -> Result<&Token, ParseError> {
-        self.peek().ok_or(ParseError::OutOfInput(description.into()))
+        self.peek().ok_or_else(|| ParseError::OutOfInput(description.into()))
     }
 
     fn at_end(&self) -> bool {
