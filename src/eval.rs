@@ -20,7 +20,7 @@ pub enum Value {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum FunctionBody {
-    PrimitiveFunction(fn (Vec<Value>) -> Result<Value, EvalError>),
+    PrimitiveFunction(fn(Vec<Value>) -> Result<Value, EvalError>),
     UserDefinedFunction {
         params: Vec<String>,
         body: Vec<Statement>,
@@ -33,7 +33,7 @@ impl fmt::Display for Value {
             Value::Number(x) => write!(f, "{}", x),
             Value::String(x) => write!(f, "\"{}\"", x),
             Value::Bool(x) => write!(f, "{}", x),
-            Value::Function{ name, .. } => write!(f, "<fn {}>", name),
+            Value::Function { name, .. } => write!(f, "<fn {}>", name),
             Value::Nil => write!(f, "nil"),
         }
     }
@@ -65,7 +65,7 @@ pub enum EvalError {
         name: String,
         arity: usize,
         got: usize,
-    }
+    },
 }
 
 struct Environment {
@@ -128,11 +128,12 @@ pub struct Interpreter<'a, W: Write> {
     out: &'a mut W,
 }
 
-impl <'a, W: Write> Interpreter<'a, W> {
+impl<'a, W: Write> Interpreter<'a, W> {
     pub fn new(out: &'a mut W) -> Self {
         let mut env = Environment::new();
-        env.define("clock".to_string(), Some(
-            Value::Function {
+        env.define(
+            "clock".to_string(),
+            Some(Value::Function {
                 name: "clock".to_string(),
                 arity: 0,
                 body: FunctionBody::PrimitiveFunction(clock_primitive),
@@ -169,13 +170,17 @@ impl <'a, W: Write> Interpreter<'a, W> {
                     .transpose()?;
                 self.env.define(identifier.to_string(), val);
             }
-            Statement::If { condition, then_branch, else_branch } => {
+            Statement::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
                 let condition_val = self.evaluate_expression(condition)?;
                 let val = value_truthiness(&condition_val);
                 match (val, else_branch) {
                     (true, _) => self.evaluate_statement(then_branch)?,
                     (false, Some(else_branch)) => self.evaluate_statement(else_branch)?,
-                    _ => {},
+                    _ => {}
                 }
             }
             Statement::While { condition, body } => {
@@ -189,14 +194,17 @@ impl <'a, W: Write> Interpreter<'a, W> {
                 self.env.pop_scope();
                 ret?
             }
-            Statement::FunctionDef { name, params, body } => self.env.define(name.to_string(), Some(Value::Function {
-                name: name.to_string(),
-                arity: params.len(),
-                body: FunctionBody::UserDefinedFunction {
-                    params: params.to_vec(),
-                    body: body.to_vec(),
-                },
-            })),
+            Statement::FunctionDef { name, params, body } => self.env.define(
+                name.to_string(),
+                Some(Value::Function {
+                    name: name.to_string(),
+                    arity: params.len(),
+                    body: FunctionBody::UserDefinedFunction {
+                        params: params.to_vec(),
+                        body: body.to_vec(),
+                    },
+                }),
+            ),
         }
         Ok(())
     }
@@ -227,7 +235,11 @@ impl <'a, W: Write> Interpreter<'a, W> {
         }
     }
 
-    fn evaluate_unary(&mut self, op: &UnaryOperator, expr: &Expression) -> Result<Value, EvalError> {
+    fn evaluate_unary(
+        &mut self,
+        op: &UnaryOperator,
+        expr: &Expression,
+    ) -> Result<Value, EvalError> {
         let expr_val = self.evaluate_expression(expr)?;
 
         let incorrect_type_error = Err(EvalError::UnaryIncorrectTypes {
@@ -245,20 +257,24 @@ impl <'a, W: Write> Interpreter<'a, W> {
         }
     }
 
-    fn evaluate_infix(&mut self, op: &InfixOperator, lhs: &Expression, rhs: &Expression) -> Result<Value, EvalError> {
+    fn evaluate_infix(
+        &mut self,
+        op: &InfixOperator,
+        lhs: &Expression,
+        rhs: &Expression,
+    ) -> Result<Value, EvalError> {
         match op {
-            InfixOperator::Equals => match (self.evaluate_expression(lhs)?, self.evaluate_expression(rhs)?) {
+            InfixOperator::Equals => match (
+                self.evaluate_expression(lhs)?,
+                self.evaluate_expression(rhs)?,
+            ) {
                 (Value::Number(x), Value::Number(y)) =>
                 {
                     #[allow(clippy::float_cmp)]
                     Ok(Value::Bool(x == y))
                 }
-                (Value::String(x), Value::String(y)) => {
-                    Ok(Value::Bool(x == y))
-                }
-                (Value::Bool(x), Value::Bool(y)) => {
-                    Ok(Value::Bool(x == y))
-                }
+                (Value::String(x), Value::String(y)) => Ok(Value::Bool(x == y)),
+                (Value::Bool(x), Value::Bool(y)) => Ok(Value::Bool(x == y)),
                 (Value::Nil, Value::Nil) => Ok(Value::Bool(true)),
                 (lhs_val, rhs_val) => Err(EvalError::InfixIncorrectTypes {
                     op: op.clone(),
@@ -266,18 +282,17 @@ impl <'a, W: Write> Interpreter<'a, W> {
                     rhs: rhs_val,
                 }),
             },
-            InfixOperator::NotEquals => match (self.evaluate_expression(lhs)?, self.evaluate_expression(rhs)?) {
+            InfixOperator::NotEquals => match (
+                self.evaluate_expression(lhs)?,
+                self.evaluate_expression(rhs)?,
+            ) {
                 (Value::Number(x), Value::Number(y)) =>
                 {
                     #[allow(clippy::float_cmp)]
                     Ok(Value::Bool(x != y))
                 }
-                (Value::String(x), Value::String(y)) => {
-                    Ok(Value::Bool(x != y))
-                }
-                (Value::Bool(x), Value::Bool(y)) => {
-                    Ok(Value::Bool(x != y))
-                }
+                (Value::String(x), Value::String(y)) => Ok(Value::Bool(x != y)),
+                (Value::Bool(x), Value::Bool(y)) => Ok(Value::Bool(x != y)),
                 (Value::Nil, Value::Nil) => Ok(Value::Bool(false)),
                 (lhs_val, rhs_val) => Err(EvalError::InfixIncorrectTypes {
                     op: op.clone(),
@@ -285,40 +300,39 @@ impl <'a, W: Write> Interpreter<'a, W> {
                     rhs: rhs_val,
                 }),
             },
-            InfixOperator::Less => self.evaluate_numeric_infix(op, lhs, rhs, |x, y| {
-                Value::Bool(x < y)
-            }),
-            InfixOperator::LessEqual => self.evaluate_numeric_infix(op, lhs, rhs, |x, y| {
-                Value::Bool(x <= y)
-            }),
-            InfixOperator::Greater => self.evaluate_numeric_infix(op, lhs, rhs, |x, y| {
-                Value::Bool(x > y)
-            }),
-            InfixOperator::GreaterEqual => self.evaluate_numeric_infix(op, lhs, rhs, |x, y| {
-                Value::Bool(x >= y)
-            }),
-            InfixOperator::Plus => match (self.evaluate_expression(lhs)?, self.evaluate_expression(rhs)?) {
-                (Value::Number(x), Value::Number(y)) => {
-                    Ok(Value::Number(x + y))
-                }
-                (Value::String(x), Value::String(y)) => {
-                    Ok(Value::String(x + &y))
-                }
+            InfixOperator::Less => {
+                self.evaluate_numeric_infix(op, lhs, rhs, |x, y| Value::Bool(x < y))
+            }
+            InfixOperator::LessEqual => {
+                self.evaluate_numeric_infix(op, lhs, rhs, |x, y| Value::Bool(x <= y))
+            }
+            InfixOperator::Greater => {
+                self.evaluate_numeric_infix(op, lhs, rhs, |x, y| Value::Bool(x > y))
+            }
+            InfixOperator::GreaterEqual => {
+                self.evaluate_numeric_infix(op, lhs, rhs, |x, y| Value::Bool(x >= y))
+            }
+            InfixOperator::Plus => match (
+                self.evaluate_expression(lhs)?,
+                self.evaluate_expression(rhs)?,
+            ) {
+                (Value::Number(x), Value::Number(y)) => Ok(Value::Number(x + y)),
+                (Value::String(x), Value::String(y)) => Ok(Value::String(x + &y)),
                 (lhs_val, rhs_val) => Err(EvalError::InfixIncorrectTypes {
                     op: op.clone(),
                     lhs: lhs_val,
                     rhs: rhs_val,
                 }),
             },
-            InfixOperator::Minus => self.evaluate_numeric_infix(op, lhs, rhs, |x, y| {
-                Value::Number(x - y)
-            }),
-            InfixOperator::Times => self.evaluate_numeric_infix(op, lhs, rhs, |x, y| {
-                Value::Number(x * y)
-            }),
-            InfixOperator::Divide => self.evaluate_numeric_infix(op, lhs, rhs, |x, y| {
-                Value::Number(x / y)
-            }),
+            InfixOperator::Minus => {
+                self.evaluate_numeric_infix(op, lhs, rhs, |x, y| Value::Number(x - y))
+            }
+            InfixOperator::Times => {
+                self.evaluate_numeric_infix(op, lhs, rhs, |x, y| Value::Number(x * y))
+            }
+            InfixOperator::Divide => {
+                self.evaluate_numeric_infix(op, lhs, rhs, |x, y| Value::Number(x / y))
+            }
             InfixOperator::Or => {
                 let lhs_val = self.evaluate_expression(lhs)?;
                 if value_truthiness(&lhs_val) {
@@ -343,15 +357,13 @@ impl <'a, W: Write> Interpreter<'a, W> {
         op: &InfixOperator,
         lhs: &Expression,
         rhs: &Expression,
-        f: fn (f64, f64) -> Value
+        f: fn(f64, f64) -> Value,
     ) -> Result<Value, EvalError> {
         let lhs_val = self.evaluate_expression(lhs)?;
         let rhs_val = self.evaluate_expression(rhs)?;
 
         match (&lhs_val, &rhs_val) {
-            (Value::Number(x), Value::Number(y)) => {
-                Ok(f(*x, *y))
-            }
+            (Value::Number(x), Value::Number(y)) => Ok(f(*x, *y)),
             _ => Err(EvalError::InfixIncorrectTypes {
                 op: op.clone(),
                 lhs: lhs_val.clone(),
@@ -360,7 +372,11 @@ impl <'a, W: Write> Interpreter<'a, W> {
         }
     }
 
-    fn evaluate_function(&mut self, callee: &Expression, args: &[Expression]) -> Result<Value, EvalError> {
+    fn evaluate_function(
+        &mut self,
+        callee: &Expression,
+        args: &[Expression],
+    ) -> Result<Value, EvalError> {
         let callee_val = self.evaluate_expression(callee)?;
         match callee_val {
             Value::Function { name, arity, body } => {
@@ -382,15 +398,16 @@ impl <'a, W: Write> Interpreter<'a, W> {
                         self.env.add_scope();
 
                         for (i, param) in params.iter().enumerate() {
-                            self.env.define(param.to_string(), Some(arg_vals[i].clone()));
+                            self.env
+                                .define(param.to_string(), Some(arg_vals[i].clone()));
                         }
 
                         self.evaluate_statements(&body)?;
                         self.env.pop_scope();
                         Ok(Value::Nil) // Always return nil for now
-                    },
+                    }
                 }
-            },
+            }
             _ => Err(EvalError::ExpectedFunctionGot(callee_val)),
         }
     }
@@ -574,7 +591,13 @@ mod tests {
               var x = clock;
               print x();
             "#,
-            format!("{}\n", SystemTime::now().duration_since(UNIX_EPOCH).expect("duration_since").as_secs()),
+            format!(
+                "{}\n",
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("duration_since")
+                    .as_secs()
+            ),
         );
 
         fn assert_failure_output(input: &str, expected: EvalError) {
@@ -593,7 +616,21 @@ mod tests {
         assert_failure_output("x = 4;", EvalError::UnknownIdentifer("x".to_string()));
 
         // Incorrect number of function args
-        assert_failure_output("fun x() {} x(1);", EvalError::IncorrectArity{ name: "x".to_string(), arity: 0, got: 1 });
-        assert_failure_output("fun x(x, y) {} x();", EvalError::IncorrectArity{ name: "x".to_string(), arity: 2, got: 0 });
+        assert_failure_output(
+            "fun x() {} x(1);",
+            EvalError::IncorrectArity {
+                name: "x".to_string(),
+                arity: 0,
+                got: 1,
+            },
+        );
+        assert_failure_output(
+            "fun x(x, y) {} x();",
+            EvalError::IncorrectArity {
+                name: "x".to_string(),
+                arity: 2,
+                got: 0,
+            },
+        );
     }
 }

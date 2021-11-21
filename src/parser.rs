@@ -152,10 +152,17 @@ impl Parser {
         self.expect_token("parse_function_declaration fun", TokenValue::Fun)?;
 
         let name = self.expect_identifier("parse_function_declaration")?;
-        self.expect_token("parse_function_declaration left paren", TokenValue::LeftParen)?;
+        self.expect_token(
+            "parse_function_declaration left paren",
+            TokenValue::LeftParen,
+        )?;
 
         let mut params = Vec::new();
-        if self.peek_require("parse_function_declaration immediate right paren")?.value != TokenValue::RightParen {
+        if self
+            .peek_require("parse_function_declaration immediate right paren")?
+            .value
+            != TokenValue::RightParen
+        {
             loop {
                 params.push(self.expect_identifier("function params")?);
                 if self.peek_require("function params comma")?.value == TokenValue::Comma {
@@ -166,7 +173,10 @@ impl Parser {
             }
         }
 
-        self.expect_token("parse_function_declaration right paren", TokenValue::RightParen)?;
+        self.expect_token(
+            "parse_function_declaration right paren",
+            TokenValue::RightParen,
+        )?;
 
         let body = self.parse_block_inner()?;
 
@@ -236,11 +246,12 @@ impl Parser {
 
         self.expect_token("parse_for left paren", TokenValue::LeftParen)?;
 
-        let initializer: Option<Statement> = match self.peek_require("parse_for initializer")?.value {
+        let initializer: Option<Statement> = match self.peek_require("parse_for initializer")?.value
+        {
             TokenValue::Semicolon => {
                 self.advance();
                 None
-            },
+            }
             TokenValue::Var => Some(self.parse_declaration()?),
             _ => Some(self.parse_expression_statement()?),
         };
@@ -249,12 +260,12 @@ impl Parser {
             TokenValue::Semicolon => {
                 self.advance();
                 None
-            },
+            }
             _ => {
                 let expr = self.parse_expression()?;
                 self.expect_token("parse_for condition semicolon", TokenValue::Semicolon)?;
                 Some(expr)
-            },
+            }
         };
 
         let increment: Option<Statement> = match self.peek_require("parse_for increment")?.value {
@@ -275,7 +286,7 @@ impl Parser {
         //   }
         // }
         match increment {
-            None => {},
+            None => {}
             Some(inc) => {
                 body = Statement::Block(vec![body, inc]);
             }
@@ -305,14 +316,25 @@ impl Parser {
             statements.push(self.parse_declaration()?);
         }
 
-        assert_eq!(self.peek_require("parse_block right brace")?.value, TokenValue::RightBrace);
+        assert_eq!(
+            self.peek_require("parse_block right brace")?.value,
+            TokenValue::RightBrace
+        );
         self.advance();
 
         Ok(statements)
     }
 
-    fn expect_token<S: Into<String>>(&mut self, context: S, token_value: TokenValue) -> Result<(), ParseError> {
-        let ending_tok = self.peek_require(format!("({}) expect_token {:?}", context.into(), token_value))?;
+    fn expect_token<S: Into<String>>(
+        &mut self,
+        context: S,
+        token_value: TokenValue,
+    ) -> Result<(), ParseError> {
+        let ending_tok = self.peek_require(format!(
+            "({}) expect_token {:?}",
+            context.into(),
+            token_value
+        ))?;
         if ending_tok.value == token_value {
             self.advance();
             Ok(())
@@ -325,18 +347,18 @@ impl Parser {
     }
 
     fn expect_identifier<S: Into<String>>(&mut self, context: S) -> Result<String, ParseError> {
-        let tok = self.peek_require(format!("({}) expect_identifier", context.into()))?.clone();
+        let tok = self
+            .peek_require(format!("({}) expect_identifier", context.into()))?
+            .clone();
         match tok.value {
             TokenValue::Identifier(ident) => {
                 self.advance();
                 Ok(ident)
             }
-            _ => {
-               Err(ParseError::UnexpectedTokenExpected {
-                    got: tok.clone(),
-                    want: TokenValue::Identifier("IDENTIFIER".to_string()),
-                })
-            }
+            _ => Err(ParseError::UnexpectedTokenExpected {
+                got: tok.clone(),
+                want: TokenValue::Identifier("IDENTIFIER".to_string()),
+            }),
         }
     }
 
@@ -528,9 +550,7 @@ impl Parser {
                 TokenValue::LeftParen => {
                     expr = self.finish_call(expr)?;
                 }
-                _ =>{
-                    break
-                }
+                _ => break,
             }
         }
 
@@ -541,7 +561,11 @@ impl Parser {
         self.expect_token("finish_call left paren", TokenValue::LeftParen)?;
 
         let mut args = Vec::new();
-        if self.peek_require("finish_call immediate right paren")?.value != TokenValue::RightParen {
+        if self
+            .peek_require("finish_call immediate right paren")?
+            .value
+            != TokenValue::RightParen
+        {
             loop {
                 args.push(self.parse_expression()?);
                 if self.peek_require("finish_call args comma")?.value == TokenValue::Comma {
@@ -598,7 +622,8 @@ impl Parser {
 
     /// Like peek(), but returns an error if we reach end of input
     fn peek_require<S: Into<String>>(&self, description: S) -> Result<&Token, ParseError> {
-        self.peek().ok_or_else(|| ParseError::OutOfInput(description.into()))
+        self.peek()
+            .ok_or_else(|| ParseError::OutOfInput(description.into()))
     }
 
     fn at_end(&self) -> bool {
