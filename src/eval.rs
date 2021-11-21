@@ -185,6 +185,7 @@ impl <'a, W: Write> Interpreter<'a, W> {
                 self.env.pop_scope();
                 ret?
             }
+            Statement::Function { .. } => todo!("eval function definition {:?}", statement),
         }
         Ok(())
     }
