@@ -31,6 +31,7 @@ pub enum Statement {
         body: Vec<Statement>,
     },
     Block(Vec<Statement>),
+    Return(Option<Expression>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -196,6 +197,7 @@ impl Parser {
             TokenValue::While => self.parse_while(),
             TokenValue::For => self.parse_for(),
             TokenValue::LeftBrace => self.parse_block(),
+            TokenValue::Return => self.parse_return(),
             _ => self.parse_expression_statement(),
         }
     }
@@ -323,6 +325,20 @@ impl Parser {
         self.advance();
 
         Ok(statements)
+    }
+
+    fn parse_return(&mut self) -> Result<Statement, ParseError> {
+        self.expect_token("parse_return return", TokenValue::Return)?;
+
+        let expr = if self.peek().map(|t| t.value.clone()) != Some(TokenValue::Semicolon) {
+            Some(self.parse_expression()?)
+        } else {
+            None
+        };
+
+        self.expect_token("parse_return semicolon", TokenValue::Semicolon)?;
+
+        Ok(Statement::Return(expr))
     }
 
     fn expect_token<S: Into<String>>(

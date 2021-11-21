@@ -5,6 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::parser::{Expression, InfixOperator, Literal, Program, Statement, UnaryOperator};
 
+/// The result of evaluating an expression.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     Number(f64),
@@ -45,6 +46,17 @@ fn value_truthiness(val: &Value) -> bool {
         Value::Bool(x) => *x,
         _ => true,
     }
+}
+
+/// StatementReturn is used to implement the return statement. It is
+/// used to short-circuit statement processing if there is a return in
+/// the middle of a group of statements. It also allows a function
+/// call to determine if we just reached the end of the function or if
+/// we returned a value.
+#[derive(Debug, PartialEq, Clone)]
+enum StatementReturn {
+    NoReturn,
+    Return(Value),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -143,25 +155,33 @@ impl<'a, W: Write> Interpreter<'a, W> {
     }
 
     pub fn evaluate_program(&mut self, program: Program) -> Result<(), EvalError> {
-        self.evaluate_statements(&program.statements)
-    }
-
-    fn evaluate_statements(&mut self, statements: &[Statement]) -> Result<(), EvalError> {
-        for statement in statements.iter() {
-            self.evaluate_statement(statement)?;
-        }
+        self.evaluate_statements(&program.statements)?;
         Ok(())
     }
 
-    fn evaluate_statement(&mut self, statement: &Statement) -> Result<(), EvalError> {
+    fn evaluate_statements(&mut self, statements: &[Statement]) -> Result<StatementReturn, EvalError> {
+        for statement in statements.iter() {
+            if let StatementReturn::Return(result) = self.evaluate_statement(statement)? {
+                return Ok(StatementReturn::Return(result));
+            }
+        }
+        Ok(StatementReturn::NoReturn)
+    }
+
+    fn evaluate_statement(&mut self, statement: &Statement) -> Result<StatementReturn, EvalError> {
         match statement {
             Statement::Expression(expr) => {
                 self.evaluate_expression(expr)?;
+                // N.B. We don't return the result of a bare
+                // expression statement. We just evaluate it for side
+                // effects.
+                Ok(StatementReturn::NoReturn)
             }
             Statement::Print(expr) => {
                 let expr = self.evaluate_expression(expr)?;
                 writeln!(self.out, "{}", expr)
                     .map_err(|err| EvalError::IOError(err.to_string()))?;
+                Ok(StatementReturn::NoReturn)
             }
             Statement::Declaration { identifier, expr } => {
                 let val = expr
@@ -169,6 +189,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     .map(|expr| self.evaluate_expression(expr))
                     .transpose()?;
                 self.env.define(identifier.to_string(), val);
+                Ok(StatementReturn::NoReturn)
             }
             Statement::If {
                 condition,
@@ -178,35 +199,47 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 let condition_val = self.evaluate_expression(condition)?;
                 let val = value_truthiness(&condition_val);
                 match (val, else_branch) {
-                    (true, _) => self.evaluate_statement(then_branch)?,
-                    (false, Some(else_branch)) => self.evaluate_statement(else_branch)?,
-                    _ => {}
+                    (true, _) => self.evaluate_statement(then_branch),
+                    (false, Some(else_branch)) => self.evaluate_statement(else_branch),
+                    _ => Ok(StatementReturn::NoReturn)
                 }
             }
             Statement::While { condition, body } => {
                 while value_truthiness(&self.evaluate_expression(condition)?) {
-                    self.evaluate_statement(body)?;
+                    // Short circuit return if we need to
+                    if let StatementReturn::Return(result) = self.evaluate_statement(body)? {
+                        return Ok(StatementReturn::Return(result));
+                    }
                 }
+                Ok(StatementReturn::NoReturn)
             }
             Statement::Block(stmts) => {
                 self.env.add_scope();
                 let ret = self.evaluate_statements(stmts);
                 self.env.pop_scope();
-                ret?
+                ret
             }
-            Statement::FunctionDef { name, params, body } => self.env.define(
-                name.to_string(),
-                Some(Value::Function {
-                    name: name.to_string(),
-                    arity: params.len(),
-                    body: FunctionBody::UserDefinedFunction {
-                        params: params.to_vec(),
-                        body: body.to_vec(),
-                    },
-                }),
-            ),
+            Statement::FunctionDef { name, params, body } => {
+                self.env.define(
+                    name.to_string(),
+                    Some(Value::Function {
+                        name: name.to_string(),
+                        arity: params.len(),
+                        body: FunctionBody::UserDefinedFunction {
+                            params: params.to_vec(),
+                            body: body.to_vec(),
+                        },
+                    }),
+                );
+                Ok(StatementReturn::NoReturn)
+            }
+            Statement::Return(expr) => {
+                match expr {
+                    Some(expr) => Ok(StatementReturn::Return(self.evaluate_expression(expr)?)),
+                    None => Ok(StatementReturn::Return(Value::Nil)),
+                }
+            }
         }
-        Ok(())
     }
 
     fn evaluate_expression(&mut self, expr: &Expression) -> Result<Value, EvalError> {
@@ -402,9 +435,13 @@ impl<'a, W: Write> Interpreter<'a, W> {
                                 .define(param.to_string(), Some(arg_vals[i].clone()));
                         }
 
-                        self.evaluate_statements(&body)?;
+                        let ret = self.evaluate_statements(&body)?;
                         self.env.pop_scope();
-                        Ok(Value::Nil) // Always return nil for now
+
+                        match ret {
+                            StatementReturn::NoReturn => Ok(Value::Nil),
+                            StatementReturn::Return(val) => Ok(val),
+                        }
                     }
                 }
             }
@@ -598,6 +635,23 @@ mod tests {
                     .expect("duration_since")
                     .as_secs()
             ),
+        );
+
+        // Early return. Test that return bubbles up through nested
+        // AST nodes.
+        assert_success_output(
+            r#"
+              fun early() {
+                while (true) {
+                  if (true) {
+                    return 2;
+                  }
+                }
+                print "I'm not here";
+              }
+              print early();
+            "#,
+            "2\n",
         );
 
         fn assert_failure_output(input: &str, expected: EvalError) {
