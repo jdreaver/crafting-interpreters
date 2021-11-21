@@ -21,6 +21,10 @@ pub enum Value {
 #[derive(Debug, PartialEq, Clone)]
 pub enum FunctionBody {
     PrimitiveFunction(fn (Vec<Value>) -> Result<Value, EvalError>),
+    UserDefinedFunction {
+        params: Vec<String>,
+        body: Vec<Statement>,
+    },
 }
 
 impl fmt::Display for Value {
@@ -185,7 +189,14 @@ impl <'a, W: Write> Interpreter<'a, W> {
                 self.env.pop_scope();
                 ret?
             }
-            Statement::Function { .. } => todo!("eval function definition {:?}", statement),
+            Statement::FunctionDef { name, params, body } => self.env.define(name.to_string(), Some(Value::Function {
+                name: name.to_string(),
+                arity: params.len(),
+                body: FunctionBody::UserDefinedFunction {
+                    params: params.to_vec(),
+                    body: body.to_vec(),
+                },
+            })),
         }
         Ok(())
     }
@@ -366,6 +377,18 @@ impl <'a, W: Write> Interpreter<'a, W> {
                     .collect::<Result<Vec<_>, _>>()?;
                 match body {
                     FunctionBody::PrimitiveFunction(f) => f(arg_vals),
+                    FunctionBody::UserDefinedFunction { params, body } => {
+                        // Bind params
+                        self.env.add_scope();
+
+                        for (i, param) in params.iter().enumerate() {
+                            self.env.define(param.to_string(), Some(arg_vals[i].clone()));
+                        }
+
+                        self.evaluate_statements(&body)?;
+                        self.env.pop_scope();
+                        Ok(Value::Nil) // Always return nil for now
+                    },
                 }
             },
             _ => Err(EvalError::ExpectedFunctionGot(callee_val)),
@@ -532,6 +555,18 @@ mod tests {
             "0\n1\n2\n",
         );
 
+        // Function def
+        assert_success_output(
+            r#"
+              fun hello(x, y) {
+                print "hello " + x;
+                print "hello also " + y;
+              }
+              hello("bob", "dole");
+            "#,
+            "\"hello bob\"\n\"hello also dole\"\n",
+        );
+
         // N.B. This has a race condition. We should mock time in the
         // interpreter.
         assert_success_output(
@@ -556,5 +591,9 @@ mod tests {
 
         // Assign to nonexistent variable
         assert_failure_output("x = 4;", EvalError::UnknownIdentifer("x".to_string()));
+
+        // Incorrect number of function args
+        assert_failure_output("fun x() {} x(1);", EvalError::IncorrectArity{ name: "x".to_string(), arity: 0, got: 1 });
+        assert_failure_output("fun x(x, y) {} x();", EvalError::IncorrectArity{ name: "x".to_string(), arity: 2, got: 0 });
     }
 }

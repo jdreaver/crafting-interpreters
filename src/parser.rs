@@ -25,7 +25,7 @@ pub enum Statement {
         condition: Expression,
         body: Box<Statement>,
     },
-    Function {
+    FunctionDef {
         name: String,
         params: Vec<String>,
         body: Vec<Statement>,
@@ -173,7 +173,7 @@ impl Parser {
 
         let body = self.parse_block_inner()?;
 
-        Ok(Statement::Function { name, params, body })
+        Ok(Statement::FunctionDef { name, params, body })
     }
 
     fn parse_statement(&mut self) -> Result<Statement, ParseError> {
